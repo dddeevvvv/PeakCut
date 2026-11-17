@@ -26,8 +26,11 @@ SCHEMA = {
             "hashtags": {"type": "ARRAY", "items": {"type": "STRING"}},
             "highlight_words": {"type": "ARRAY", "items": {"type": "STRING"}},
             "reason": {"type": "STRING"},
+            "first_words": {"type": "STRING"},
+            "last_words": {"type": "STRING"},
         },
-        "required": ["start", "end", "score", "hook", "title", "description", "hashtags", "reason"],
+        "required": ["start", "end", "score", "hook", "title", "description", "hashtags", "reason",
+                     "first_words", "last_words"],
     },
 }
 
@@ -54,6 +57,12 @@ Rules:
 - Each clip is {min_len} to {max_len} seconds. Use the [seconds] values for start and end.
 - Start on the setup line, not mid-sentence. End right after the payoff or reaction, on the last word of a
   complete sentence: never in the middle of a sentence or a thought. The clip must make sense on its own.
+- The transcript may have no full stops, and a line is not always a sentence: a clip may start or end inside
+  a line. The first seconds must hook a stranger: start on the line that raises the question or the stakes,
+  not on "and", "but", "so" or the tail of the sentence before.
+- first_words: the first 4 to 6 words of the clip, copied exactly as they are written in the transcript.
+- last_words: the last 4 to 6 words of the clip, copied exactly as they are written in the transcript.
+  The clip is cut on these words, so they decide where it starts and ends.
 - Do not pick intros, sponsor reads, "like and subscribe", or dead air.
 - Skip weak moments. Fewer strong clips beat many weak ones. Return [] if nothing is worth clipping.
 - score: 0-100, how likely a stranger keeps watching. Be honest; most clips are 50-80.
@@ -215,6 +224,42 @@ def sentence_ends(words) -> list:
     return out
 
 
+def _norm(t) -> str:
+    return re.sub(r"[^\w]", "", str(t).lower())
+
+
+def locate(words, quote, near, end=False, reach=15.0):
+    """Where a quoted run of words is said, near a time: the start of its first word, or with end=True the end of
+    its last word. None when the quote is not found closely enough (then the seconds the AI gave are used).
+    The AI quotes the transcript, so this cuts on the very word it meant, which seconds alone often miss."""
+    q = [x for x in (_norm(x) for x in str(quote or "").split()) if x][:12]
+    if len(q) < 2 or not words or near is None:
+        return None
+    n, best, at = len(q), 0.0, None
+    for i, w in enumerate(words):
+        if abs((w["e"] if end else w["s"]) - near) > reach + 8:
+            continue
+        seg = [_norm(x["w"]) for x in words[i:i + n]]
+        r = difflib.SequenceMatcher(None, q, seg).ratio()
+        if r > best or (r == best and at is not None and abs(w["s"] - near) < abs(words[at]["s"] - near)):
+            best, at = r, i
+    if at is None or best < 0.6:
+        return None
+    return words[min(at + n - 1, len(words) - 1)]["e"] if end else words[at]["s"]
+
+
+def _pin(clip, words):
+    """Move the AI's start and end onto the words it quoted. Marks which ends were found that way."""
+    s, e = _num(clip.get("start"), -1), _num(clip.get("end"), -1)
+    a = locate(words, clip.get("first_words"), s)
+    b = locate(words, clip.get("last_words"), e, end=True)
+    if a is not None:
+        clip["start"], clip["_exact_s"] = a, True
+    if b is not None and b > _num(clip.get("start"), -1):
+        clip["end"], clip["_exact_e"] = b, True
+    return clip
+
+
 def _snap(clip, lines, words, min_len, max_len, duration):
     """Start at the beginning of a line and end where a sentence ends, inside the allowed length. A clip that stops
     in the middle of a sentence feels cut off, so the sentence being said at the chosen end is finished; if that
@@ -222,12 +267,15 @@ def _snap(clip, lines, words, min_len, max_len, duration):
     s, e = _num(clip.get("start"), -1), _num(clip.get("end"), -1)
     if s < 0 or e <= s:
         return 0.0, 0.0          # not a usable answer: callers drop it on the minimum-length check
-    starts = [l["s"] for l in lines if abs(l["s"] - s) <= 4]
-    if starts:
-        s = min(starts, key=lambda x: abs(x - s))
+    if not clip.get("_exact_s"):     # the AI quoted the first words: start right there, not at a nearby line
+        starts = [l["s"] for l in lines if abs(l["s"] - s) <= 4]
+        if starts:
+            s = min(starts, key=lambda x: abs(x - s))
     lo, hi = s + min_len, min(s + max_len, duration)
     stops = [x for x in sentence_ends(words) if lo <= x <= hi]
-    if stops:
+    if clip.get("_exact_e") and lo <= e <= hi:
+        pass                         # the AI quoted the last words and the length is allowed: end right there
+    elif stops:
         after = [x for x in stops if x >= e - 1.0]
         e = after[0] if after and after[0] - e <= 12 else min(stops, key=lambda x: abs(x - e))
     else:                        # no sentence ends in reach (one long unbroken stretch): at least end on a whole word
@@ -302,7 +350,7 @@ def find_clips(words, db, duration, title="", uploader="", max_clips=6, min_len=
         note = "The AI was unavailable, so clips were picked by loudness only."
     clips = []
     for c in sorted(found, key=lambda c: -_num(c.get("score"))):
-        s, e = _snap(c, lines, words, min_len, max_len, duration)
+        s, e = _snap(_pin(dict(c), words), lines, words, min_len, max_len, duration)
         if e - s < min(min_len, duration) - 1:
             continue
         if _overlaps(s, e, clips):
@@ -326,7 +374,7 @@ def find_live_clips(words, z, now, chat=None, title="", uploader="", min_len=15,
     out, _model, spent = ask_ai(prompt, purpose="Live check")
     clips = []
     for c in sorted((c for c in out if isinstance(c, dict)), key=lambda c: -_num(c.get("score"))):
-        s, e = _snap(c, lines, words, min_len, max_len, now)
+        s, e = _snap(_pin(dict(c), words), lines, words, min_len, max_len, now)
         if e - s < min_len - 1 or _overlaps(s, e, list(existing) + clips):
             continue
         clips.append(_tidy(c, s, e, game))
@@ -444,7 +492,7 @@ def judge_transcript(words, start, now, title="", uploader="", min_len=15, max_l
     out, _model, spent = ask_ai(prompt, purpose="Live: words judge", timeout=timeout)
     clips = []
     for c in sorted((c for c in out if isinstance(c, dict)), key=lambda c: -_num(c.get("score"))):
-        s, e = _snap(c, lines, words, min_len, max_len, now)
+        s, e = _snap(_pin(dict(c), words), lines, words, min_len, max_len, now)
         if e - s < min_len - 1 or _overlaps(s, e, list(existing) + clips):
             continue
         clips.append(_tidy(c, s, e, game))
