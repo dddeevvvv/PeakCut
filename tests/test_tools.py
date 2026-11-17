@@ -33,6 +33,13 @@ os.environ["PEAKCUT_FFMPEG_DIR"] = hidden
 tools._places = real_places
 check("PEAKCUT_FFMPEG_DIR is looked in first", tools._places()[0], Path(hidden))
 tools.setup()
+check("PEAKCUT_FFMPEG_DIR wins even when another ffmpeg is on the PATH", Path(shutil.which("ffmpeg")).parent, Path(hidden))
+os.environ["PATH"] = real_path
+os.environ.pop("PEAKCUT_FFMPEG_DIR")
+check("an ffmpeg without libass is explained in plain words",
+      "libass" in tools.explain_render("[AVFilterGraph @ 0x1] No option name near 'clip02.ass:fontsdir=f'"), True)
+check("...also the older wording", "libass" in tools.explain_render("No such filter: 'ass'"), True)
+check("other render errors are left as they are", tools.explain_render("Invalid data found when processing input"), "")
 
 # ---- the speech model
 d = config.ASR_MODEL_DIR

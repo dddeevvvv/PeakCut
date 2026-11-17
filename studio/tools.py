@@ -45,9 +45,27 @@ def _places() -> list:
     return out
 
 
+def _preferred() -> list:
+    """Folders whose ffmpeg is used even when another ffmpeg is on the PATH: the one named in PEAKCUT_FFMPEG_DIR,
+    and on a Mac Homebrew's "ffmpeg-full". Homebrew's plain "ffmpeg" cannot draw captions (it has no libass), and
+    Homebrew keeps "ffmpeg-full" off the PATH, so without this the plain one would always win."""
+    out = []
+    if os.environ.get("PEAKCUT_FFMPEG_DIR"):
+        out.append(Path(os.environ["PEAKCUT_FFMPEG_DIR"]))
+    if sys.platform == "darwin":
+        out += [Path("/opt/homebrew/opt/ffmpeg-full/bin"), Path("/usr/local/opt/ffmpeg-full/bin")]
+    return out
+
+
 def setup() -> list:
     """Make ffmpeg and ffprobe reachable for everything PeakCut runs. Returns the ones that could not be found."""
     exe = ".exe" if sys.platform == "win32" else ""
+    for d in reversed(_preferred()):
+        try:
+            if (d / ("ffmpeg" + exe)).is_file() and str(d) not in os.environ.get("PATH", "").split(os.pathsep)[:1]:
+                os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
+        except OSError:
+            pass
     missing = []
     for name in NEEDED:
         if shutil.which(name):
@@ -71,6 +89,20 @@ def missing() -> list:
     if _seen["missing"] and time.time() - _seen["at"] > 20:
         setup()
     return list(_seen["missing"])
+
+
+CAPTIONS_HELP = ("This ffmpeg can't draw captions (it was built without libass). "
+                 + ("Run:  brew install ffmpeg-full  then close PeakCut and start it again. PeakCut uses it by itself."
+                    if sys.platform == "darwin" else
+                    "Install a full build of ffmpeg, or set PEAKCUT_FFMPEG_DIR to the folder of one that has libass."))
+
+
+def explain_render(err: str) -> str:
+    """The plain-words version of ffmpeg failing on the caption step because it has no caption filter."""
+    text = str(err or "")
+    if "No such filter: 'ass'" in text or ("No option name near" in text and ".ass" in text):
+        return CAPTIONS_HELP
+    return ""
 
 
 def explain(e) -> str:

@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import config, roman
+from . import config, roman, tools
 from .media import NO_WINDOW, run
 
 W, H = config.OUT_W, config.OUT_H
@@ -312,7 +312,7 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         if label == "qsv":
             _qsv_ok = False
     else:
-        raise RuntimeError(f"Render failed: {err}")
+        raise RuntimeError(tools.explain_render(err) or f"Render failed: {err}")
     cover_t = min(1.2, (end - start) / 2)
     run(["ffmpeg", "-y", "-v", "error", "-ss", f"{cover_t:.2f}", "-i", f"{name}.mp4", "-frames:v", "1",
          "-q:v", "3", f"{name}.jpg"], cwd=work)
