@@ -59,6 +59,7 @@ def main() -> int:
                 ("no limits by default", ["tests/test_limits.py"]),
                 ("captions never overlap, stuck clips, sentence endings", ["tests/test_stuck.py"]),
                 ("clips cut on the words the AI quoted", ["tests/test_cuts.py"]),
+                ("virality score, cold open and loop-friendly endings", ["tests/test_viral.py"]),
                 ("ad breaks and frozen screens", ["tests/test_static.py"]),
                 ("answers that are not quite right", ["tests/test_answer.py"]),
                 ("knowing which game a stream is", ["tests/test_games.py"]),

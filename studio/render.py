@@ -273,7 +273,13 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     if layout == "gameplay" and not (face and len(face) == 4):
         layout = "crop"     # no webcam found: the game fills the screen, which is still the right shape
     hook_y = _hook_y(layout, hook_y, face)
-    ass = build_ass(words if clip.get("captions", True) else [], start, end, clip.get("hook", ""), clip.get("style", "bounce"),
+    tease = teaser_span(clip)
+    cap_words = words if clip.get("captions", True) else []
+    if tease:       # the captions follow the joined video: the teaser's words first, then the clip's
+        cap_words, cap_s, cap_e = teaser_words(cap_words, start, end, tease)
+    else:
+        cap_s, cap_e = start, end
+    ass = build_ass(cap_words, cap_s, cap_e, clip.get("hook", ""), clip.get("style", "bounce"),
                     clip.get("highlight_words", []), hook_y, cap_y)
     # The clip is made in a short work folder and moved into place afterwards. The caption step of ffmpeg cannot
     # open files whose full path is longer than 260 characters on Windows, which a data folder deep inside other
@@ -281,21 +287,64 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     # break the filter syntax).
     work = Path(tempfile.mkdtemp(prefix="pk"))
     try:
-        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face)
+        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face, tease=tease)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str, face=None) -> dict:
+def teaser_span(clip):
+    """The cold-open teaser to play first, as (start, end) on the source, or None. It is used only when it is on,
+    lies inside the clip after its first 2 seconds, and is 0.8 to 4.5 seconds long. A clip trimmed by hand after
+    the teaser was chosen may no longer hold it; then the clip simply plays without one."""
+    t = clip.get("teaser")
+    if not clip.get("cold_open", True) or not isinstance(t, (list, tuple)) or len(t) != 2:
+        return None
+    try:
+        a, b = float(t[0]), float(t[1])
+    except (TypeError, ValueError):
+        return None
+    if a >= clip["start"] + 2 and b <= clip["end"] + 0.01 and 0.8 <= b - a <= 4.5:
+        return a, b
+    return None
+
+
+def teaser_words(words, start, end, tease):
+    """The words on the joined timeline (teaser, then the clip from its start), and that timeline's span."""
+    a, b = tease
+    t = b - a
+    out = [dict(w, s=w["s"] - a, e=min(w["e"], b) - a) for w in words if a - 0.05 <= w["s"] < b]
+    if out:          # an invisible full stop: the teaser's captions never run on into the clip's first words
+        if out[-1]["w"][-1:] not in (".", "?", "!"):
+            out[-1]["w"] = out[-1]["w"].rstrip(",;:") + "."
+    out += [dict(w, s=w["s"] - start + t, e=w["e"] - start + t) for w in words if start - 0.05 <= w["s"] < end]
+    return out, 0.0, t + (end - start)
+
+
+def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str, face=None, tease=None) -> dict:
     global _qsv_ok
     (work / f"{name}.ass").write_text(ass, encoding="utf-8")
     (work / "f").mkdir()
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
     fc = _filter(layout, fg_h, face) + f"[v0]ass={name}.ass:fontsdir=f[v]"
-    base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
-            "-filter_complex", fc, "-map", "[v]", "-map", "0:a:0", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
-            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
+    norm = "loudnorm=I=-14:TP=-1.5:LRA=11"
+    if tease:
+        # Cold open: the teaser plays first, then a short white flash, then the clip from its start. Both pieces
+        # come from the same file, so they share size and frame shape and join cleanly.
+        a, b = tease
+        t = b - a
+        join = (f"[0:v]setpts=PTS-STARTPTS[tv];[0:a:0]asetpts=PTS-STARTPTS,afade=t=out:st={max(0.0, t - 0.06):.2f}:d=0.06[ta];"
+                f"[1:v]setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.12:color=white[mv];[1:a:0]asetpts=PTS-STARTPTS,afade=t=in:d=0.04[ma];"
+                f"[tv][ta][mv][ma]concat=n=2:v=1:a=1[jv][ja];[ja]{norm}[au];")
+        fc = join + fc.replace("[0:v]", "[jv]", 1)
+        base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{a:.2f}", "-t", f"{t:.2f}", "-i", str(src),
+                "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+                "-filter_complex", fc, "-map", "[v]", "-map", "[au]",
+                "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
+    else:
+        base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
+                "-filter_complex", fc, "-map", "[v]", "-map", "0:a:0", "-af", norm,
+                "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
     encoders = []
     if _qsv_ok is not False:
         encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-global_quality", "23", "-preset", "fast"]))

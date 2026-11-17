@@ -107,8 +107,9 @@ _by_user: dict = {}                       # user -> {job id: job}: listing one p
 _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
-DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "layout": "blur", "quality": 720,
-            "range_start": None, "range_end": None, "captions": True}
+DEFAULTS = {"max_clips": 6, "min_len": 20, "max_len": 40, "style": "bounce", "layout": "blur", "quality": 720,
+            "range_start": None, "range_end": None, "captions": True, "cold_open": True, "loop": True}
+SWITCHES = {"captions": "Captions", "cold_open": "Cold open", "loop": "Loop-friendly endings"}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
@@ -118,9 +119,9 @@ def clean_options(options) -> dict:
     """Only known settings, each inside its allowed range. Raises ValueError on nonsense."""
     out = {}
     for k, v in (options if isinstance(options, dict) else {}).items():
-        if k == "captions":
+        if k in SWITCHES:
             if not isinstance(v, bool):
-                raise ValueError("Captions must be on or off.")
+                raise ValueError(f"{SWITCHES[k]} must be on or off.")
             out[k] = v
             continue
         if k not in DEFAULTS or v in ("", None):
@@ -288,7 +289,8 @@ def create(source: dict, options: dict, enqueue=True, creator=None, kind="video"
     c = creators.get(creator) if creator else None
     if c:
         d = creators.root(c["id"]) / ("live" if kind == "live" else "videos") / jid
-        base = {**DEFAULTS, **{k: c[k] for k in ("max_clips", "min_len", "max_len", "style", "layout", "captions")}}
+        base = {**DEFAULTS, **{k: c[k] for k in ("max_clips", "min_len", "max_len", "style", "layout", "captions",
+                                                 "cold_open", "loop") if k in c}}
     else:
         d, base, creator = config.user_dir(ctx.uid()) / "jobs" / jid, dict(DEFAULTS), None
     opts = {**base, **clean_options(options)}
@@ -382,6 +384,8 @@ def render_one(job, clip, words):
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
         local = dict(clip, start=clip["start"] - off, end=clip["end"] - off, hook=roman.to_roman(clip.get("hook") or ""))
+        if clip.get("teaser"):
+            local["teaser"] = [t - off for t in clip["teaser"]]
         near = _caption_words(job, clip, words, off) if clip.get("captions", True) else []
         out = render.render_clip(src, d / "clips", clip["id"], local, near, job["width"], job["height"])
         clip.update(out, status="done", version=clip.get("version", 0) + 1, error=None)
@@ -741,7 +745,7 @@ def _run_job(job):
         hot = (lambda s_, e_, sh=shift: any(min(e_ + sh, pe) - max(s_ + sh, ps) > 0 for ps, pe in peaks)) if peaks else None
         found, ai = brain.find_clips(bw, db[s0: s0 + int((b - a) / 16000) + 1], (b - a) / 16000, job["title"],
                                      job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game,
-                                     hot=hot)
+                                     hot=hot, loop=o.get("loop", True))
         tokens += ai.get("tokens", 0)
         model = ai.get("model") or model
         if ai.get("note"):
@@ -761,7 +765,9 @@ def _run_job(job):
         for c in found:
             c.update(id=f"clip{len(job['clips']) + 1:02d}", start=round(c["start"] + shift, 2),
                      end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"],
-                     captions=o.get("captions", True), status="queued", version=0)
+                     captions=o.get("captions", True), cold_open=o.get("cold_open", True), status="queued", version=0)
+            if c.get("teaser"):
+                c["teaser"] = [round(t + shift, 2) for t in c["teaser"]]
             # Only the gameplay layout uses a webcam, so it is only looked for then, and only once: a
             # stream with no webcam is not looked for again on every clip of it.
             if o["layout"] == "gameplay" and face is False:
