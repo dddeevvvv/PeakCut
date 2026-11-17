@@ -124,6 +124,8 @@ FONTS_DIR = DATA_DIR / "fonts"          # caption fonts, copied from studio/font
 # YouTube already has a word-by-word transcript of most videos. With this on, that is what the AI reads to find the
 # clips (seconds instead of transcribing hours), and our own model is run only on the clips themselves.
 YT_TRANSCRIPT = env("PEAKCUT_YT_TRANSCRIPT", "1") != "0"
+# a second AI pass reads every clip found, with the words just before and after it, and trims or drops weak ones
+CLIP_REVIEW = env("PEAKCUT_CLIP_REVIEW", "1") != "0"
 # the compact model for processors; a machine with a graphics card sets PEAKCUT_ASR_MODEL to the full-precision one
 ASR_MODEL_NAME = env("PEAKCUT_ASR_MODEL", "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8")
 ASR_MODEL_DIR = MODELS_DIR / ASR_MODEL_NAME
