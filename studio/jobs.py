@@ -675,7 +675,9 @@ def _run_job(job):
         if yt and not _covers(yt[0], lo / 16000, hi / 16000):
             yt = None
         job["transcript_from"] = "youtube" if yt else "own"
-        job["lang"] = yt[1] if yt else ""          # the language spoken, when YouTube says (decides the captions)
+        job["lang"] = yt[1] if yt else transcribe.language()   # the language spoken (decides the captions)
+    elif not job.get("lang"):
+        job["lang"] = transcribe.language()        # our own transcript: Hindi when Whisper writes it, else English
     if resuming:
         try:
             words = json.loads((d / "words.json").read_text(encoding="utf-8"))

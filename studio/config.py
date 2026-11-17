@@ -129,6 +129,11 @@ CLIP_REVIEW = env("PEAKCUT_CLIP_REVIEW", "1") != "0"
 # the compact model for processors; a machine with a graphics card sets PEAKCUT_ASR_MODEL to the full-precision one
 ASR_MODEL_NAME = env("PEAKCUT_ASR_MODEL", "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8")
 ASR_MODEL_DIR = MODELS_DIR / ASR_MODEL_NAME
+# The language spoken in videos that are transcribed here (files, Twitch, Kick, YouTube without a transcript).
+# "en" uses the fast English model above. Any other Whisper language code ("hi" for Hindi) uses Whisper through
+# mlx-whisper on an Apple Silicon Mac (pip install mlx-whisper); without it, the English model is used as before.
+ASR_LANG = (env("PEAKCUT_ASR_LANG", "en") or "en").strip().lower()
+WHISPER_MODEL = env("PEAKCUT_WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo").strip()
 DATABASE_URL = env("DATABASE_URL") or f"sqlite:///{(DATA_DIR / 'peakcut.db').as_posix()}"
 # Commercials and "be right back" screens are stitched into streams. A clip taken from one is worthless, so those
 # seconds can be found and left out. It is off by default: it reads the whole video once, which is not free, and

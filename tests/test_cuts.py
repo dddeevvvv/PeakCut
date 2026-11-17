@@ -83,5 +83,28 @@ brain.ask_ai = broken
 out, spent = brain.review_clips([dict(c) for c in base], words, "", 10, 60, dur)
 check("when the AI fails, the clips come back unchanged", ([c["start"] for c in out], spent), ([c["start"] for c in base], 0))
 
+# ---- Hindi from our own transcript: Whisper through mlx-whisper (replaced by a stand-in here)
+import types
+import numpy as np
+from studio import config, transcribe
+check("English by default: the fast English model, no language set", transcribe.language(), "")
+config.ASR_LANG = "hi"
+real = sys.modules.get("mlx_whisper")
+sys.modules["mlx_whisper"] = None                      # not installed
+check("Hindi asked for but mlx-whisper missing: the English model, said plainly", transcribe.language(), "")
+calls = []
+def fake_transcribe(audio, **kw):
+    calls.append(kw)
+    return {"segments": [{"words": [{"word": " GTA", "start": 0.0, "end": 0.4}, {"word": " \u092e\u0947\u0902", "start": 0.5, "end": 0.7},
+                                     {"word": " ", "start": 0.8, "end": 0.9}]}]}
+sys.modules["mlx_whisper"] = types.SimpleNamespace(transcribe=fake_transcribe)
+check("with mlx-whisper the transcript is Hindi", transcribe.language(), "hi")
+got = transcribe.transcribe(np.zeros(16000, dtype=np.int16))
+check("Whisper's words come back in PeakCut's shape, empty ones left out", got, [{"w": "GTA", "s": 0.0, "e": 0.4}, {"w": "\u092e\u0947\u0902", "s": 0.5, "e": 0.7}])
+check("Whisper is told the language and asked for word times", (calls[0]["language"], calls[0]["word_timestamps"]), ("hi", True))
+config.ASR_LANG = "en"
+if real is None: sys.modules.pop("mlx_whisper", None)
+else: sys.modules["mlx_whisper"] = real
+
 print("ALL PASSED" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

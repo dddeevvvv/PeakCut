@@ -273,10 +273,52 @@ def _decode_remote(pieces: list) -> list:
     return [(p["tokens"], p["timestamps"]) for p in got]
 
 
+# ---------------------------------------------------------------- other languages: Whisper on an Apple Silicon Mac
+_whisper_lock = threading.Lock()      # one Whisper run at a time: it already uses the whole graphics chip
+_whisper_note = {"said": False}
+
+
+def _mlx_whisper():
+    try:
+        import mlx_whisper      # optional: only installed on Macs that clip videos in other languages
+        return mlx_whisper
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def language() -> str:
+    """The language our own transcript is in, as a language code ("" when it is the English model's)."""
+    return config.ASR_LANG if config.ASR_LANG != "en" and _mlx_whisper() else ""
+
+
+def _transcribe_whisper(audio: np.ndarray, on_progress=None) -> list:
+    mw = _mlx_whisper()
+    seg = audio.astype(np.float32) / 32768.0
+    with _whisper_lock:
+        out = mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=config.ASR_LANG,
+                            word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    words = []
+    for s in out.get("segments") or []:
+        for w in s.get("words") or []:
+            t = str(w.get("word", "")).strip()
+            if t:
+                words.append({"w": t, "s": round(float(w["start"]), 2), "e": round(float(w["end"]), 2)})
+    if on_progress:
+        on_progress(1.0)
+    return words
+
+
 def transcribe(audio: np.ndarray, on_progress=None) -> list:
     """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] for the whole audio.
     Speech is cut at quiet moments into 12-24 s pieces; silent pieces are skipped."""
     global _remote_down_until
+    if config.ASR_LANG != "en":
+        if _mlx_whisper():
+            return _transcribe_whisper(audio, on_progress)
+        if not _whisper_note["said"]:
+            _whisper_note["said"] = True
+            print(f"  PEAKCUT_ASR_LANG is {config.ASR_LANG!r}, but mlx-whisper is not installed: using the English "
+                  "model. On an Apple Silicon Mac:  pip install mlx-whisper", flush=True)
     words = []
     todo = []
     for a, b in _chunks(audio):

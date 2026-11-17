@@ -110,6 +110,7 @@ Everything is set through environment variables, normally in a `.env` file next 
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional: Sign in with Google, and connecting YouTube |
 | `PEAKCUT_SMTP_*`, `PEAKCUT_MAIL_FROM` | Optional: confirmation and password emails |
 | `PEAKCUT_DATA` | Where videos, clips and the database are kept (default `./data`) |
+| `PEAKCUT_ASR_LANG` | Language of videos PeakCut transcribes itself (files, Twitch, Kick). `hi` for Hindi uses Whisper on an Apple Silicon Mac: `pip install mlx-whisper` |
 
 `.env`, the `secrets/` folder and all user data are ignored by git. Keep keys there, never in the code.
 
