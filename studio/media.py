@@ -124,6 +124,20 @@ def info(url: str) -> dict:
             "thumbnail": i.get("thumbnail") or "", "kind": i.get("_type") or "video"}
 
 
+_HEAT = {}      # YouTube link -> its "most replayed" graph, noted while the transcript is fetched
+
+
+def replay_peaks(url: str) -> list:
+    """The stretches of a YouTube video that viewers replayed most: [(start, end)], from the "most replayed" graph
+    YouTube shows above the timeline. Only the top tenth, and only clear peaks. [] when the video has no graph."""
+    heat = [h for h in _HEAT.get(url) or [] if isinstance(h, dict) and "value" in h]
+    if len(heat) < 10:
+        return []
+    values = sorted(float(h["value"]) for h in heat)
+    bar = max(0.5, values[int(len(values) * 0.9)])
+    return [(float(h["start_time"]), float(h["end_time"])) for h in heat if float(h["value"]) >= bar]
+
+
 def youtube_words(url: str):
     """YouTube's own transcript of a video, word by word: ([{'w', 's', 'e'}, ...], language), or None if the video
     has none. Only the transcript in the language that was spoken is used, never a translation."""
@@ -132,6 +146,7 @@ def youtube_words(url: str):
     import json
     with _youtube_guard(url), _ydl({}) as ydl:
         i = ydl.extract_info(url, download=False)
+        _HEAT[url] = i.get("heatmap") or []
         auto = i.get("automatic_captions") or {}
         key = next((k for k in auto if k.endswith("-orig")), None)
         if not key and i.get("language") in auto:

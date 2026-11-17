@@ -37,7 +37,8 @@ SCHEMA = {
 HEAD = """You are a clip scout for short-form gaming and streaming videos (YouTube Shorts, Reels, TikTok).
 Below is a timestamped transcript of part of a video. Each line starts with [seconds]. Lines marked (LOUD)
 are where the audio got much louder than usual: shouting, laughing, sudden action. Lines marked (CHAT)
-are where the live chat suddenly got much busier, which usually means viewers reacted to something.
+are where the live chat suddenly got much busier, which usually means viewers reacted to something. Lines
+marked (HOT) are in the part of the video that viewers replayed most.
 
 Video title: {title}
 Channel: {uploader}
@@ -123,7 +124,8 @@ def _num(v, default=0.0):
 
 
 def _fmt(lines):
-    return "\n".join(f"[{l['s']:.1f}] {'(LOUD) ' if l['loud'] else ''}{'(CHAT) ' if l.get('chat') else ''}{_safe(l['text'], 2000)}"
+    return "\n".join(f"[{l['s']:.1f}] {'(LOUD) ' if l['loud'] else ''}{'(CHAT) ' if l.get('chat') else ''}"
+                     f"{'(HOT) ' if l.get('hot') else ''}{_safe(l['text'], 2000)}"
                      for l in lines)
 
 
@@ -159,7 +161,7 @@ def _overlaps(s, e, others):
     return any(min(e, k["end"]) - max(s, k["start"]) > 0.3 * (e - s) for k in others)
 
 
-def make_lines(words, loud=None, chat=None):
+def make_lines(words, loud=None, chat=None, hot=None):
     """Group words into caption-ish lines: [{'s','e','text','loud'}]."""
     lines, cur = [], []
 
@@ -171,7 +173,7 @@ def make_lines(words, loud=None, chat=None):
                 seg = loud[int(s): int(e) + 1]
                 is_loud = bool(len(seg) and seg.max() > 1.5)
             lines.append({"s": s, "e": e, "text": " ".join(w["w"] for w in cur), "loud": is_loud,
-                          "chat": bool(chat and chat(s, e))})
+                          "chat": bool(chat and chat(s, e)), "hot": bool(hot and hot(s, e))})
             cur.clear()
 
     for w in words:
@@ -318,9 +320,10 @@ def _game_rules(game):
     return GAME_RULES.format(game=_safe(games.name_of(game) or str(game), 40), tags=tags)
 
 
-def find_clips(words, db, duration, title="", uploader="", max_clips=6, min_len=15, max_len=60, log=print, game=None):
+def find_clips(words, db, duration, title="", uploader="", max_clips=6, min_len=15, max_len=60, log=print, game=None,
+               hot=None):
     z = loud_zscore(db)
-    lines = make_lines(words, z)
+    lines = make_lines(words, z, hot=hot)
     if not lines:
         return [], {"model": None, "note": "No speech found."}
     found, used_model, tokens = [], None, 0

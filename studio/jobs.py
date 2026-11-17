@@ -735,8 +735,11 @@ def _run_job(job):
             continue
         quota = max(1, math.ceil(left / (len(blocks) - bi)))
         s0 = int((a - lo) / 16000)
+        peaks = media.replay_peaks(src["url"]) if yt else []
+        hot = (lambda s_, e_, sh=shift: any(min(e_ + sh, pe) - max(s_ + sh, ps) > 0 for ps, pe in peaks)) if peaks else None
         found, ai = brain.find_clips(bw, db[s0: s0 + int((b - a) / 16000) + 1], (b - a) / 16000, job["title"],
-                                     job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game)
+                                     job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game,
+                                     hot=hot)
         tokens += ai.get("tokens", 0)
         model = ai.get("model") or model
         if ai.get("note"):

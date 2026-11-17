@@ -40,6 +40,17 @@ long_clip = dict(clip, last_words="dekhte hain kya hota hai")
 s3, e3 = brain._snap(brain._pin(long_clip, words), lines, words, 10, 20, dur)
 check("the length limit still wins over a quote", e3 - s3 <= 20.5, True)
 
+# ---- "most replayed": YouTube's graph of what viewers replayed, shown to the AI as (HOT)
+from studio import media
+url = "https://www.youtube.com/watch?v=test"
+media._HEAT[url] = [{"start_time": i * 10.0, "end_time": i * 10.0 + 10, "value": 1.0 if i == 3 else 0.2} for i in range(20)]
+check("the most replayed stretch is found", media.replay_peaks(url), [(30.0, 40.0)])
+media._HEAT[url] = [{"start_time": i * 10.0, "end_time": i * 10.0 + 10, "value": 0.3} for i in range(20)]
+check("a flat graph has no peaks", media.replay_peaks(url), [])
+check("no graph, no peaks", media.replay_peaks("https://www.youtube.com/watch?v=none"), [])
+marked = brain._fmt(brain.make_lines(words, hot=lambda s, e: s < 5))
+check("lines in a replayed stretch are marked (HOT) for the AI", marked.splitlines()[0].count("(HOT)") == 1 and "(HOT)" not in marked.splitlines()[-1], True)
+
 # ---- the second look at every clip (the AI is replaced by fixed answers here)
 base = [{"start": words[0]["s"], "end": words[40]["e"], "score": 70, "hook": "X", "title": "t", "reason": "r"},
         {"start": words[45]["s"], "end": words[-1]["e"], "score": 60, "hook": "Y", "title": "t", "reason": "r"}]
