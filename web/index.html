@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@300&family=Archivo+Black&family=Anton&family=Poppins:wght@800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Inter:wght@300&family=Archivo+Black&family=Anton&family=Poppins:wght@800&display=swap" rel="stylesheet">
 <style>
 :root{
   --brand:#FF8B33;--brand-press:#F27A1F;--brand-ink:#2A1A12;--brand-soft:#FFF2E8;--brand-line:#FFD9BC;--brand-deep:#A9480A;
@@ -813,11 +813,68 @@ dialog[open]{animation:fadein .16s ease}
   .ai-big{font-size:24px}
 }
 </style>
+<style id="theme">
+/* Theme: light sidebar, green accent, cool greys. Loaded after the main styles, so it wins. */
+:root{
+  --brand:#66CC8A;--brand-press:#52B877;--brand-ink:#0F2A1B;--brand-soft:#ECF8F0;--brand-line:#C6EBD3;--brand-deep:#1F7A45;
+  --frame:#FFFFFF;--frame-2:#F1F2F4;--frame-line:#E5E7EB;--frame-text:#1F2328;--frame-dim:#6B7280;
+  --muted:#F1F2F4;--line:#E5E7EB;--line-2:#DADDE2;--text:#1F2328;--dim:#5F6670;--faint:#9AA0A8;
+  --page:#F1F2F4;--hover:#E4E9EC;
+}
+body{background:var(--page);font-family:"Figtree","Segoe UI",system-ui,sans-serif}
+::-webkit-scrollbar-thumb{background:#D0D6D6}
+/* sidebar */
+.side{background:#fff;border-right:1px solid var(--line)}
+.nav h4{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--frame-dim);padding:16px 10px 6px}
+.nav-item{border-radius:9px}
+.nav-item:hover,.nav-item:active{background:var(--frame-2)}
+.nav-item.on,.nav-item.on:hover{background:var(--frame-2);color:var(--text);font-weight:600}
+.nav-item.on svg{color:var(--brand-deep)}
+.count{background:var(--frame-2);color:var(--dim)}
+.nav-item.on .count,.nav-item.on .working{background:#fff;color:var(--dim)}
+.nav-item.on .avatar{background:var(--brand-soft);color:var(--brand-deep)}
+.nav-item.on img.avatar{background:var(--brand-soft)}
+.avatar{background:var(--brand-soft);color:var(--brand-deep)}
+.working{color:var(--brand-deep);background:var(--brand-soft)}
+.side-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:40px;margin:0 0 10px;border:0;border-radius:10px;background:var(--brand);color:var(--brand-ink);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:background-color .15s ease}
+.side-cta svg{width:17px;height:17px}.side-cta .label{flex:none}
+.side-cta:hover{background:var(--brand-press)}
+.side-cta:focus-visible{outline:2px solid var(--brand-deep);outline-offset:2px}
+.app.mini .side-cta .label{display:none}
+.ai-card{background:var(--frame-2)}
+.ai-card .ai-ic{background:var(--brand-soft);color:var(--brand-deep)}
+.ai-card.on{border-color:var(--brand)}
+.me-btn:hover,.me-btn[aria-expanded=true]{background:var(--frame-2)}
+/* main panel */
+main{border:1px solid var(--line);margin:8px 8px 8px 8px}
+.topbar h1{font-size:20px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+/* tabs: grey track, green selected pill */
+.utabs .tabbtn:hover,.ttabs .tabbtn:hover{background:var(--hover)}
+.utabs .tabbtn.on .n{background:rgba(15,42,27,.12)}
+.ttabs .tabbtn.on{background:var(--brand);color:var(--brand-ink)}
+/* controls */
+.btn{border-radius:10px}
+.btn:hover{border-color:#C9CED4}
+.btn.primary:hover,.shot:hover .veil span{background:var(--brand-press);border-color:var(--brand-press)}
+.btn.primary:disabled{background:#E4E9EC;color:var(--faint)}
+.btn.dark:hover{background:#1E3A2A;border-color:#1E3A2A}
+.chip:hover,.chip:focus-visible,.tile-o:enabled:hover,.tile-o:focus-visible,.seg button:hover,.seg button:focus-visible{background:var(--hover)}
+.composer:has(#url:focus){border-color:var(--brand)}
+label.ck:hover{border-color:#C9CED4}
+.vb{background:#FFF7E6;color:#7A4A06}.vb b{color:#5A3604}
+.lp.wait .th,.sk{background:linear-gradient(90deg,#EEF0F2 0%,#F7F8F9 50%,#EEF0F2 100%);background-size:200% 100%}
+.chprev img,.chprev .ph,.chan .pic{background:#EEF0F2}
+.pick-new:hover,.pick-new:focus-visible{background:rgba(102,204,138,.16);color:#A6E3BC}
+.pick-new .av,.pick-opt .av{background:rgba(102,204,138,.2)}
+.splat button.on{background:rgba(102,204,138,.25)}
+.lay-prev .ph i{background:linear-gradient(135deg,#66CC8A,#A6E3BC)}
+#selbar{border-color:rgba(102,204,138,.3)}
+</style>
 </head>
 <body>
 <div class="app" id="app">
   <aside class="side" aria-label="Sidebar">
-    <div class="side-head"><img class="logo" src="/brand/logo-light.svg" alt="PeakCut"><img class="mark" src="/brand/favicon.svg" alt="PeakCut">
+    <div class="side-head"><img class="logo" src="/brand/logo.svg" alt="PeakCut"><img class="mark" src="/brand/favicon.svg" alt="PeakCut">
       <button class="icon-btn collapse" data-act="collapse" id="collapseBtn" aria-label="Collapse sidebar"></button></div>
     <nav class="nav" id="nav" aria-label="Main"></nav>
     <div class="side-foot" id="foot"></div>
@@ -1248,7 +1305,7 @@ function moveInd() {
   lastInd = {x, w};
 }
 function drawShell() {  const nav = (v, icon, label, extra = "") => `<button class="nav-item ${S.view === v ? "on" : ""}" data-act="go" data-v="${esc(v)}" title="${esc(label)}">${icon}<span class="label">${esc(label)}</span>${extra}</button>`;
-  put($("#nav"), nav("overview", navIc("home", "overview"), "Home") +
+  put($("#nav"), `<button class="side-cta" data-act="newvideo" title="New video">${ic("plus")}<span class="label">New video</span></button>` + `<h4><span>Clips</span></h4>` + nav("overview", navIc("home", "overview"), "Home") +
     nav("library", navIc("film", "library"), "All videos", (() => { const w = S.jobs.filter(j => ["queued", "running"].includes(j.status)).length;
       return w ? `<span class="working" title="${w} working now"><i></i>${w} working</span>` : S.jobs.length ? `<span class="count">${S.jobs.length}</span>` : ""; })()) +
     `<h4><span>Creators</span></h4>` +
@@ -1340,7 +1397,7 @@ function go(v, tab, fromHistory) {
   else if (v === "usage") { view.innerHTML = `<div id="usage"></div>`; loadUsage(); }
   else view.innerHTML = `<div id="stream"></div><div id="cbody"></div>`;   // the live player stays put across tabs: no restart, no rebuffer
   if ($("#add")) drawAdd(v === "overview" ? "hero" : "compact");
-  if (v === "overview" && window.GradientASCII) { try { window._gaStop = GradientASCII($("#appAscii"), {colors: ["#ffb27a", "#ffffff", "#ffd2ae", "#ffe0c2", "#fff1e6"], shape: "horizon", lightMode: true, cellSize: 16, density: 0.8, glyphOpacity: 0.26, gradientOpacity: 0.32, glow: 0.06, grain: 0.06, mouseInteraction: false, clickEffect: "none"}); } catch {} }
+  if (v === "overview" && window.GradientASCII) { try { window._gaStop = GradientASCII($("#appAscii"), {colors: ["#8fdcaa", "#ffffff", "#bfe9cf", "#d6f1e0", "#eef9f2"], shape: "horizon", lightMode: true, cellSize: 16, density: 0.8, glyphOpacity: 0.26, gradientOpacity: 0.32, glow: 0.06, grain: 0.06, mouseInteraction: false, clickEffect: "none"}); } catch {} }
   if (v === "settings") drawSettings();
   if (v.startsWith("c:")) setTab(S.ctab);
   $("#main").scrollTo(0, 0); render();
@@ -2288,6 +2345,7 @@ document.addEventListener("click", async e => {
     if (a === "collapse") { const m = $("#app").classList.toggle("mini"); try { localStorage.setItem("mini", m ? "1" : ""); } catch {} return; }
     if (a === "toggleopts") { const p = $(".composer-opts"), open = !p.classList.contains("open"); p.classList.toggle("open", open); p.inert = !open; b.classList.toggle("on", open); b.setAttribute("aria-expanded", String(open)); return; }
     if (a === "focusurl") return $("#url")?.focus();
+    if (a === "newvideo") { if (!$("#url")) go("overview"); return setTimeout(() => $("#url")?.focus(), 80); }
     if (a === "step") {
       const t = d.to;
       if (t === "newcreator") return $('[data-act="newcreator"]').click();
