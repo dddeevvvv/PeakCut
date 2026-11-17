@@ -5,6 +5,7 @@ room, waits in line for a moment when it is nearly full, and is let through the 
 what keeps a rush from slowing everyone down or crashing the server."""
 import os
 import shutil
+import sys
 import threading
 import time
 
@@ -30,9 +31,31 @@ def _cpu_times():
         n = lambda f: (f.dwHighDateTime << 32) | f.dwLowDateTime          # noqa: E731
         total = n(kernel) + n(user)                                        # kernel time includes idle time
         return total - n(idle), total
+    if sys.platform == "darwin":
+        return _mac_cpu_times()
     with open("/proc/stat", encoding="ascii") as f:
         v = [int(x) for x in f.readline().split()[1:9]]
     return sum(v) - v[3] - v[4], sum(v)                                    # everything except idle and waiting on disk
+
+
+_mach = {}
+
+
+def _mac_cpu_times():
+    """The same on a Mac, which has no /proc: the processor's tick counts from the kernel (host_statistics,
+    HOST_CPU_LOAD_INFO), as user, system, idle and nice."""
+    import ctypes
+    if not _mach:
+        lib = ctypes.CDLL("/usr/lib/libSystem.dylib")
+        lib.mach_host_self.restype = ctypes.c_uint
+        lib.host_statistics.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint)]
+        lib.host_statistics.restype = ctypes.c_int
+        _mach.update(lib=lib, host=lib.mach_host_self())
+    ticks, count = (ctypes.c_uint * 4)(), ctypes.c_uint(4)
+    if _mach["lib"].host_statistics(_mach["host"], 3, ticks, ctypes.byref(count)) != 0:   # 3: HOST_CPU_LOAD_INFO
+        raise OSError("host_statistics failed")
+    user, system, idle, nice = (int(x) for x in ticks)
+    return user + system + nice, user + system + idle + nice
 
 
 def _ram_free_gb() -> float:
@@ -56,7 +79,7 @@ def _ram_free_gb() -> float:
 def _watch():
     try:
         last = _cpu_times()
-    except Exception:  # noqa: BLE001 - a system whose processor we cannot measure (a Mac): leave that out, keep the rest
+    except Exception:  # noqa: BLE001 - a system whose processor we cannot measure: leave that out, keep the rest
         last = None
     while True:
         time.sleep(1)

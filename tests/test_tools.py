@@ -21,12 +21,15 @@ for name in tools.NEEDED:
 os.environ["PATH"] = tempfile.mkdtemp(prefix="pc-empty-")            # a PATH with no ffmpeg on it
 real_places = tools._places
 tools._places = lambda: []
+real_preferred = tools._preferred
+tools._preferred = lambda: []                                         # not even a Mac's ffmpeg-full
 check("with ffmpeg nowhere, both programs are reported missing", tools.setup(), ["ffmpeg", "ffprobe"])
 err = FileNotFoundError(2, "The system cannot find the file specified")
 check("the bare Windows error becomes what to do about it", "ffmpeg" in safe.friendly(err) and "install" in safe.friendly(err), True)
 check("...also when it arrives as text", "ffmpeg" in safe.friendly(RuntimeError("[WinError 2] The system cannot find the file specified")), True)
 check("an unrelated error is left as it is", safe.friendly(ValueError("That link is a playlist.")), "That link is a playlist.")
 tools._places = lambda: [Path(hidden)]
+tools._preferred = real_preferred
 check("installed but not on the PATH yet: found in its folder and used from there", (tools.setup(), bool(shutil.which("ffmpeg"))), ([], True))
 os.environ["PATH"] = real_path
 os.environ["PEAKCUT_FFMPEG_DIR"] = hidden
