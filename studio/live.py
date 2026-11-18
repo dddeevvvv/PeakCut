@@ -860,6 +860,8 @@ def recover(job):
                     dur = max(0.0, float(b) - float(a))
                 except ValueError:
                     continue
+                if dur > SEG_SEC * 4:
+                    dur = _file_seconds(s.buf / name)     # the first piece's entry under -copyts: see _scan_segments
                 s.segments.append((s.buf / name, s.seg_clock, s.seg_clock + dur))
                 s.seg_clock += dur
             s.csv_seen[i] = len(rows)
