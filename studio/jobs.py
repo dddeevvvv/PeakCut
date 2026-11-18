@@ -4,6 +4,7 @@ import json
 import os
 import math
 import queue
+import re
 import shutil
 import threading
 import time
@@ -108,7 +109,7 @@ _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
 DEFAULTS = {"max_clips": 6, "min_len": 20, "max_len": 40, "style": "bounce", "layout": "stack", "quality": 720,
-            "range_start": None, "range_end": None, "captions": True, "cold_open": True, "loop": True}
+            "range_start": None, "range_end": None, "captions": True, "cold_open": True, "loop": True, "lang": ""}
 SWITCHES = {"captions": "Captions", "cold_open": "Cold open", "loop": "Loop-friendly endings"}
 
 
@@ -133,6 +134,9 @@ def clean_options(options) -> dict:
             v = v if v in render.STYLES else DEFAULTS["style"]
         elif k == "layout":
             v = v if v in render.LAYOUTS else DEFAULTS["layout"]
+        elif k == "lang":       # the language spoken, for our own transcript ("" = the server's setting)
+            v = str(v).strip().lower()
+            v = v if re.fullmatch(r"[a-z]{2,3}", v) else ""
         else:                                    # range_start, range_end: seconds into the video
             v = float(v)
             if not math.isfinite(v) or v < 0:
@@ -290,7 +294,7 @@ def create(source: dict, options: dict, enqueue=True, creator=None, kind="video"
     if c:
         d = creators.root(c["id"]) / ("live" if kind == "live" else "videos") / jid
         base = {**DEFAULTS, **{k: c[k] for k in ("max_clips", "min_len", "max_len", "style", "layout", "captions",
-                                                 "cold_open", "loop") if k in c}}
+                                                 "cold_open", "loop", "lang") if k in c}}
     else:
         d, base, creator = config.user_dir(ctx.uid()) / "jobs" / jid, dict(DEFAULTS), None
     opts = {**base, **clean_options(options)}
@@ -677,6 +681,7 @@ def _run_job(job):
     words, tokens, model = [], 0, None
     done_blocks = 0
     yt = None
+    opts_lang = job["options"].get("lang") or None   # the creator's language, else the server's
     if src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
         try:
             yt = media.youtube_words(src["url"])
@@ -685,9 +690,9 @@ def _run_job(job):
         if yt and not _covers(yt[0], lo / 16000, hi / 16000):
             yt = None
         job["transcript_from"] = "youtube" if yt else "own"
-        job["lang"] = yt[1] if yt else transcribe.language()   # the language spoken (decides the captions)
+        job["lang"] = yt[1] if yt else transcribe.language(opts_lang)   # the language spoken (decides the captions)
     elif not job.get("lang"):
-        job["lang"] = transcribe.language()        # our own transcript: Hindi when Whisper writes it, else English
+        job["lang"] = transcribe.language(opts_lang)        # our own transcript: Hindi when Whisper writes it, else English
     if resuming:
         try:
             words = json.loads((d / "words.json").read_text(encoding="utf-8"))
@@ -717,7 +722,7 @@ def _run_job(job):
                 if now_on[0] == i and p - last[0] > 0.05:      # only the part being shown moves the bar
                     last[0] = p
                     _set(job, progress=max(job["progress"], 0.14 + 0.78 * ((a_ - lo) + p * (b_ - a_)) / max(1, hi - lo)))
-            heard[i] = ahead.submit(ctx.bind(transcribe.transcribe), audio[a_:b_], tp)
+            heard[i] = ahead.submit(ctx.bind(transcribe.transcribe), audio[a_:b_], tp, opts_lang)
 
     # The ad breaks and static screens of the whole video, found once. It reads the video end to end,
     # so it is done here rather than for each clip, and only when asked for.

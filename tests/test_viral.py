@@ -153,5 +153,29 @@ check("stack: the big text sits just below the face", render._hook_y("stack", 30
 render.render_clip(src, work / "out", "stack", dict(base, start=10.0, end=18.0, teaser=None, layout="stack", facecam=[60, 300, 240, 135], hook="X"), ws, 640, 360)
 check("a stacked clip renders at full size", abs(length(work / "out" / "stack.mp4") - 8.0) < 0.3, True)
 
+# ---- each streamer's own language
+from studio import creators, transcribe
+check("a creator can be set to Hindi", creators._clean({"lang": "HI"})["lang"], "hi")
+check("a bad language falls back to the server's", creators._clean({"lang": "hindi!"})["lang"], "")
+check("a video's options keep the language", jobs.clean_options({"lang": "hi"})["lang"], "hi")
+check("no language set: the server's is used", transcribe.pick_lang(None), transcribe.config.ASR_LANG)
+check("the creator's language wins", transcribe.pick_lang("hi"), "hi")
+
+# ---- sound stays on time when the stream drops audio
+import subprocess
+import numpy as np
+beep = work / "beep.ts"     # a beep at 15 s, then a 1 s hole in the sound before it
+subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=25", "-f", "lavfi",
+                "-i", "aevalsrc='if(between(t,15,15.1),sin(2*PI*1000*t),0)':s=48000:d=25", "-c:v", "libx264", "-preset", "ultrafast",
+                "-c:a", "aac", "-f", "mpegts", str(beep)], check=True)
+gap = work / "gap.ts"
+subprocess.run(["ffmpeg", "-v", "error", "-y", "-copyts", "-i", str(beep), "-map", "0", "-c", "copy",
+                "-bsf:a", "noise=drop='between(pts*tb-1.4,12,13)'", "-muxdelay", "0", "-muxpreload", "0", str(gap)], check=True)
+render.render_clip(gap, work / "gapout", "crop", dict(base, start=10.0, end=18.0, teaser=None, layout="crop", hook="X"), ws, 640, 360)
+pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(work / "gapout" / "crop.mp4"), "-map", "0:a:0", "-ac", "1", "-ar", "8000",
+                      "-f", "s16le", "-"], capture_output=True).stdout
+x = np.abs(np.frombuffer(pcm, np.int16).astype(float))
+check("a hole in the sound is filled, so the beep stays on time", abs(np.argmax(x > x.max() / 2) / 8000 - 5.0) < 0.08, True)
+
 print("ALL PASSED" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

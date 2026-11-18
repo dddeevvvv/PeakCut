@@ -286,16 +286,22 @@ def _mlx_whisper():
         return None
 
 
-def language() -> str:
+def pick_lang(lang=None) -> str:
+    """The language to transcribe in: the creator's own setting when there is one, else the server's."""
+    return (lang or config.ASR_LANG or "en").strip().lower()
+
+
+def language(lang=None) -> str:
     """The language our own transcript is in, as a language code ("" when it is the English model's)."""
-    return config.ASR_LANG if config.ASR_LANG != "en" and _mlx_whisper() else ""
+    lang = pick_lang(lang)
+    return lang if lang != "en" and _mlx_whisper() else ""
 
 
-def _transcribe_whisper(audio: np.ndarray, on_progress=None) -> list:
+def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang="hi") -> list:
     mw = _mlx_whisper()
     seg = audio.astype(np.float32) / 32768.0
     with _whisper_lock:
-        out = mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=config.ASR_LANG,
+        out = mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=lang,
                             word_timestamps=True, condition_on_previous_text=False, verbose=None)
     words = []
     for s in out.get("segments") or []:
@@ -308,16 +314,17 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None) -> list:
     return words
 
 
-def transcribe(audio: np.ndarray, on_progress=None) -> list:
+def transcribe(audio: np.ndarray, on_progress=None, lang=None) -> list:
     """Returns [{'w': word, 's': start_sec, 'e': end_sec}, ...] for the whole audio.
     Speech is cut at quiet moments into 12-24 s pieces; silent pieces are skipped."""
     global _remote_down_until
-    if config.ASR_LANG != "en":
+    lang = pick_lang(lang)
+    if lang != "en":
         if _mlx_whisper():
-            return _transcribe_whisper(audio, on_progress)
+            return _transcribe_whisper(audio, on_progress, lang)
         if not _whisper_note["said"]:
             _whisper_note["said"] = True
-            print(f"  PEAKCUT_ASR_LANG is {config.ASR_LANG!r}, but mlx-whisper is not installed: using the English "
+            print(f"  The language is {lang!r}, but mlx-whisper is not installed: using the English "
                   "model. On an Apple Silicon Mac:  pip install mlx-whisper", flush=True)
     words = []
     todo = []

@@ -108,6 +108,7 @@ def mine(jid):
 class Session:
     def __init__(self, job, settings):
         self.job, self.settings = job, settings
+        job.setdefault("lang", transcribe.language(settings.get("lang")))   # Hindi when this streamer is set to it
         self.dir = Path(job["dir"])
         self.buf = self.dir / "buffer"
         self.buf.mkdir(exist_ok=True)
@@ -392,7 +393,7 @@ class Session:
         if not hurry or n > SR * 24:
             # cut at the quietest moment between 4 and 6.5 s, so no word is split; the rest waits for the next pass
             _, cut = next(transcribe._chunks(audio, 4.0, 6.5))
-        words = transcribe.transcribe(audio[:cut])
+        words = transcribe.transcribe(audio[:cut], lang=self.settings.get("lang"))
         off = base / SR
         for w in words:
             w["s"], w["e"] = round(w["s"] + off, 2), round(w["e"] + off, 2)
@@ -646,11 +647,11 @@ class Session:
         """Where `src` really starts on the transcript clock. The video pieces and the audio feed keep separate
         clocks that drift apart, so transcribe the clip's own audio and line its words up with the live words.
         Local speech model only: no AI calls."""
-        key = lambda w: re.sub(r"[^a-z0-9]", "", w.lower())
+        key = lambda w: re.sub(r"[\W_]", "", w.lower())   # keeps Hindi letters too
         try:
             wav = src.with_suffix(".wav")
             media.extract_audio(src, wav)
-            heard = transcribe.transcribe(media.load_audio(wav))
+            heard = transcribe.transcribe(media.load_audio(wav), lang=self.settings.get("lang"))
             wav.unlink(missing_ok=True)
             with self.lock:
                 near = [w for w in self.words if guess - 15 <= w["s"] <= guess + dur + 15]
