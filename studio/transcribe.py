@@ -302,9 +302,20 @@ def language(lang=None) -> str:
 def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang="hi") -> list:
     mw = _mlx_whisper()
     seg = audio.astype(np.float32) / 32768.0
-    with _whisper_lock:
-        out = mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=None if lang == "auto" else lang,
-                            word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    def run(language):
+        with _whisper_lock:
+            return mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=language,
+                                 word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    if lang == "auto":
+        # Mixed streams are Hindi and English only. Whisper sometimes hears music or noise as Russian or another
+        # language and writes junk: then it is asked again in Hindi, and in English if Hindi loops too.
+        out = run(None)
+        if str(out.get("language") or "") not in MIXED:
+            out = run("hi")
+            if all(_looping(x) for x in out.get("segments") or [{"text": "a a a a a a"}]):
+                out = run("en")
+    else:
+        out = run(lang)
     words = []
     for s in out.get("segments") or []:
         if _looping(s):
@@ -316,6 +327,9 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang="hi") -> list:
     if on_progress:
         on_progress(1.0)
     return words
+
+
+MIXED = ("hi", "en", "ur")      # what "Mixed" may come out as: Hindi, English, or Hindi heard as Urdu
 
 
 def _looping(seg: dict) -> bool:

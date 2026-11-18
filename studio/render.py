@@ -347,7 +347,8 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     (work / "f").mkdir()
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
-    fc = _filter(layout, fg_h, face) + f"[v0]ass={name}.ass:fontsdir=f[v]"
+    # lanczos: the sharpest of ffmpeg's scalers, which matters when a 720p stream is blown up to 1080x1920
+    fc = "sws_flags=lanczos;" + _filter(layout, fg_h, face) + f"[v0]ass={name}.ass:fontsdir=f[v]"
     # Live streams drop audio packets now and then. Without a fill, every sound after a drop plays early and
     # the lips no longer match. aresample puts each sample back on its own time and fills holes with silence.
     sync = "aresample=async=1:first_pts=0"
@@ -360,7 +361,7 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
         join = (f"[0:v]setpts=PTS-STARTPTS[tv];[0:a:0]{sync},afade=t=out:st={max(0.0, t - 0.06):.2f}:d=0.06[ta];"
                 f"[1:v]setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.12:color=white[mv];[1:a:0]{sync},afade=t=in:d=0.04[ma];"
                 f"[tv][ta][mv][ma]concat=n=2:v=1:a=1[jv][ja];[ja]loudnorm=I=-14:TP=-1.5:LRA=11[au];")
-        fc = join + fc.replace("[0:v]", "[jv]", 1)
+        fc = "sws_flags=lanczos;" + join + fc.replace("sws_flags=lanczos;", "", 1).replace("[0:v]", "[jv]", 1)
         base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{a:.2f}", "-t", f"{t:.2f}", "-i", str(src),
                 "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
                 "-filter_complex", fc, "-map", "[v]", "-map", "[au]",
@@ -371,8 +372,8 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
                 "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]
     encoders = []
     if _qsv_ok is not False:
-        encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-global_quality", "23", "-preset", "fast"]))
-    encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-crf", "21", "-preset", "veryfast"]))
+        encoders.append(("qsv", ["nv12", "-c:v", "h264_qsv", "-global_quality", "20", "-preset", "fast"]))
+    encoders.append(("x264", ["yuv420p", "-c:v", "libx264", "-crf", "18", "-preset", "veryfast"]))
     err = None
     for label, enc in encoders:
         p = subprocess.run(base + enc + [f"{name}.mp4"], cwd=work, capture_output=True, text=True,

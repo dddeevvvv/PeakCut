@@ -180,6 +180,21 @@ pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(work / "gapout" / "crop
 x = np.abs(np.frombuffer(pcm, np.int16).astype(float))
 check("a hole in the sound is filled, so the beep stays on time", abs(np.argmax(x > x.max() / 2) / 8000 - 5.0) < 0.08, True)
 
+# ---- Mixed language never comes out as Russian junk
+import numpy as np
+_asked = []
+class _MW:
+    def transcribe(self, seg, language=None, **k):
+        _asked.append(language)
+        if language is None:
+            return {"language": "ru", "segments": [{"text": "x", "words": [{"word": "Імпальный", "start": 0, "end": 1}]}]}
+        return {"language": language, "segments": [{"text": "bhai dekho", "words": [{"word": "bhai", "start": 0, "end": 0.5}]}]}
+_old = transcribe._mlx_whisper
+transcribe._mlx_whisper = lambda: _MW()
+check("a Mixed piece heard as Russian is asked again in Hindi", [w["w"] for w in transcribe._transcribe_whisper(np.zeros(16000, np.int16), lang="auto")], ["bhai"])
+check("the languages asked: detect, then Hindi", _asked, [None, "hi"])
+transcribe._mlx_whisper = _old
+
 # ---- YouTube live chat
 from studio import ytchat
 page = {"continuationContents": {"liveChatContinuation": {
