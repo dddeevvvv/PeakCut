@@ -896,6 +896,9 @@ def start_session(creator: dict, url=None) -> dict:
         raise ValueError(media.YT_BLOCKED.replace("download videos", "record YouTube streams")
                          .replace("Upload the video file instead, or use a Twitch or Kick link. YouTube links",
                                   "Twitch and Kick streams still work. YouTube"))
+    if load.disk_full():
+        raise ValueError(f"The drive has only {load.disk_free_gb():.1f} GB free, so no new recording starts. "
+                         "Free up some space, then try again.")
     if len(active_mine()) >= config.MAX_LIVE_PER_USER:
         raise ValueError(f"You're already recording {len(active_mine())} streams, the most this server allows at once. Stop one first.")
     if len(active()) >= config.MAX_LIVE_TOTAL or (active() and load.busy()):

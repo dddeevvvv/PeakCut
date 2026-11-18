@@ -382,6 +382,9 @@ def render_one(job, clip, words):
     save(job)
     try:
         if not clip.get("src") and not job.get("source_path"):
+            if job.get("kind") == "live":
+                raise RuntimeError("This clip's piece of the recording was cleared after 2 days to save space, "
+                                   "so it can't be made again. The finished clip is still here.")
             _piece_again(job, clip)
         off = clip.get("src_offset", 0.0)
         src = Path(clip["src"]) if clip.get("src") else Path(job["source_path"])

@@ -13,7 +13,7 @@ from . import config
 
 BUSY_CPU = float(config.env("PEAKCUT_BUSY_CPU", "82"))          # percent: above this, no extra videos are started
 MIN_FREE_RAM_GB = float(config.env("PEAKCUT_MIN_FREE_RAM_GB", "1.5"))
-MIN_FREE_DISK_GB = float(config.env("PEAKCUT_MIN_FREE_DISK_GB", "3"))
+MIN_FREE_DISK_GB = float(config.env("PEAKCUT_MIN_FREE_DISK_GB", "10"))   # no new videos or recordings below this
 
 _state = {"cpu": 0.0, "ram_free": 99.0, "disk_free": 99.0, "at": 0.0}
 _force = None            # tests only: pretend the server is busy (True) or free (False)
@@ -119,6 +119,11 @@ def busy() -> bool:
         return _force
     start()
     return _state["cpu"] >= BUSY_CPU or _state["ram_free"] < MIN_FREE_RAM_GB
+
+
+def disk_free_gb() -> float:
+    start()
+    return _state["disk_free"]
 
 
 def disk_full() -> bool:

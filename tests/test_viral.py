@@ -215,6 +215,24 @@ sess.settings = {"buffer_min": 20}
 sess._scan_segments()
 check("a -copyts recording's pieces keep their real lengths", all(0 < b - a < 8 for _, a, b in sess.segments) and sess.seg_clock < 25, True)
 
+# ---- disk: old source cuts and ended recordings' buffers are cleared, finished clips stay
+from studio import disk
+import time
+dd = work / "disk"; (dd / "clips").mkdir(parents=True); (dd / "buffer").mkdir()
+for n in ("clips/c1.src.ts", "clips/c1.mp4", "clips/c2.src.ts", "buffer/p01_00001.ts"):
+    (dd / n).write_bytes(b"x" * 1000)
+djob = {"id": "dj", "kind": "live", "dir": str(dd), "status": "done", "clips": [
+    {"id": "c1", "status": "done", "made_at": time.time() - 3 * 86400, "src": str(dd / "clips/c1.src.ts"), "src_offset": 1},
+    {"id": "c2", "status": "done", "made_at": time.time() - 3600, "src": str(dd / "clips/c2.src.ts")}]}
+_aj, _sv = jobs.all_jobs, jobs.save
+jobs.all_jobs, jobs.save = (lambda: [djob]), (lambda j: None)
+freed = disk.sweep()
+jobs.all_jobs, jobs.save = _aj, _sv
+check("a 3-day-old source cut is cleared, the clip stays", [(dd / "clips/c1.src.ts").exists(), (dd / "clips/c1.mp4").exists(), djob["clips"][0].get("src_gone")], [False, True, True])
+check("a 1-hour-old source cut stays", (dd / "clips/c2.src.ts").exists(), True)
+check("an ended recording's buffer is cleared", list((dd / "buffer").glob("*")), [])
+check("bytes freed are counted", freed, 2000)
+
 # ---- YouTube live chat
 from studio import ytchat
 page = {"continuationContents": {"liveChatContinuation": {
