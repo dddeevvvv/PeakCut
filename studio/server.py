@@ -702,7 +702,14 @@ def link_preview(request: Request, url: str = ""):
         raise HTTPException(422, str(e))
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        why = str(e).lower()
+        if "confirm your age" in why or "age-restricted" in why or "inappropriate for some users" in why:
+            raise HTTPException(422, "YouTube only shows this video to signed-in adults (it is age-restricted), so "
+                                     "PeakCut can't download it. Try another video.")
+        if "members-only" in why or "join this channel" in why:
+            raise HTTPException(422, "This video is for channel members only, so PeakCut can't download it.")
+        print(f"Link preview failed for {url}: {str(e)[-300:]}", flush=True)
         raise HTTPException(422, "Couldn't open that video. Check the link is public and complete.")
 
 
