@@ -62,6 +62,15 @@ class _Quiet:
     def error(self, m): pass
 
 
+def _file_seconds(path) -> float:
+    """How long a media file plays, from its own header; 0 when it can't be read."""
+    try:
+        out = media.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)])
+        return max(0.0, float(str(out).strip().splitlines()[0]))
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
 def resolve(url: str) -> dict:
     """Ask yt-dlp for the stream's playable address. Raises NotLive if the channel is offline."""
     import yt_dlp
@@ -318,6 +327,10 @@ class Session:
                         dur = max(0.0, float(b) - float(a))
                     except ValueError:
                         continue
+                    if dur > SEG_SEC * 4:
+                        # With -copyts the first piece's list entry runs from 0 to the stream's own clock (hours),
+                        # so its length is read from the file itself.
+                        dur = _file_seconds(self.buf / name)
                     self.segments.append((self.buf / name, self.seg_clock, self.seg_clock + dur))
                     self.seg_clock += dur
                 self.csv_seen[i] = len(rows)

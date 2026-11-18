@@ -198,6 +198,23 @@ transcribe._transcribe_whisper(np.zeros(16000, np.int16), lang="auto")
 check("where Hindi loops, English is asked", _asked[3:], ["hi", "en"])
 transcribe._mlx_whisper = _old
 
+# ---- -copyts recordings: the first piece's list entry spans the stream's whole clock
+from studio import live
+import threading
+rec = work / "rec"; rec.mkdir()
+subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=20", "-c:v", "libx264",
+                "-g", "60", "-preset", "ultrafast", "-output_ts_offset", "24271", "-f", "mpegts", str(rec / "v.ts")], check=True)
+subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=duration=18", "-c:a", "aac", "-output_ts_offset", "24273",
+                "-f", "mpegts", str(rec / "a.ts")], check=True)
+subprocess.run(["ffmpeg", "-v", "error", "-copyts", "-i", str(rec / "v.ts"), "-i", str(rec / "a.ts"), "-map", "0:v:0", "-map", "1:a:0",
+                "-c", "copy", "-f", "segment", "-segment_time", "6", "-reset_timestamps", "1", "-segment_format", "mpegts",
+                "-segment_list", str(rec / "p01.csv"), "-segment_list_type", "csv", str(rec / "p01_%05d.ts")], check=True)
+sess = object.__new__(live.Session)
+sess.lock, sess.buf, sess.part, sess.csv_seen, sess.segments, sess.seg_clock = threading.RLock(), rec, 1, {}, [], 0.0
+sess.settings = {"buffer_min": 20}
+sess._scan_segments()
+check("a -copyts recording's pieces keep their real lengths", all(0 < b - a < 8 for _, a, b in sess.segments) and sess.seg_clock < 25, True)
+
 # ---- YouTube live chat
 from studio import ytchat
 page = {"continuationContents": {"liveChatContinuation": {
