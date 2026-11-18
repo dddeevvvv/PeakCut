@@ -107,7 +107,7 @@ _by_user: dict = {}                       # user -> {job id: job}: listing one p
 _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
-DEFAULTS = {"max_clips": 6, "min_len": 20, "max_len": 40, "style": "bounce", "layout": "blur", "quality": 720,
+DEFAULTS = {"max_clips": 6, "min_len": 20, "max_len": 40, "style": "bounce", "layout": "stack", "quality": 720,
             "range_start": None, "range_end": None, "captions": True, "cold_open": True, "loop": True}
 SWITCHES = {"captions": "Captions", "cold_open": "Cold open", "loop": "Loop-friendly endings"}
 
@@ -383,6 +383,12 @@ def render_one(job, clip, words):
         src = Path(clip["src"]) if clip.get("src") else Path(job["source_path"])
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
+        if clip.get("layout") in ("gameplay", "stack") and not clip.get("facecam"):
+            # A clip switched to a facecam layout later, or made by hand: the webcam is looked for once per
+            # video or stream, in the file this clip is cut from.
+            face = job.get("facecam") or _facecam(job, src)
+            if face:
+                clip["facecam"] = face
         local = dict(clip, start=clip["start"] - off, end=clip["end"] - off, hook=roman.to_roman(clip.get("hook") or ""))
         if clip.get("teaser"):
             local["teaser"] = [t - off for t in clip["teaser"]]
@@ -527,14 +533,14 @@ def _covers(words: list, start: float, end: float) -> bool:
     return len(inside) >= 25 * minutes and inside[-1]["s"] >= start + 0.85 * (end - start)
 
 
-def _facecam(job) -> list | None:
+def _facecam(job, path=None) -> list | None:
     """Where the webcam is in the source: once for the whole video, for every clip of it.
 
     Only a sure answer is used. A box that is a scoreboard drawn over the game would
     put a picture of a scoreboard in the corner of the clip. One frame is also shown to
     the AI, which tells a person from a game character better than any measurement can;
     what it says is measured again on the picture, so it cannot do any harm."""
-    path = job.get("source_path")
+    path = path or job.get("source_path")
     if not path or not Path(path).is_file():
         return None
     try:
