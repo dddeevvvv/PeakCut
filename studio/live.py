@@ -516,7 +516,9 @@ class Session:
         keep = [c for c in cands if c["score"] >= (40 if must else st["min_score"])]
         verdict["transcript"] = max((c["score"] for c in cands), default=0)
         z = brain.loud_zscore(np.array(self.db, dtype=np.float32))
-        lo, hi = int(ws), int(now) + 1
+        # The reaction judge sees at most the last 90 s: over five minutes, a stream with busy chat and music the
+        # whole time looks flat, and a real burst gets lost in it.
+        lo, hi = int(max(ws, now - 90)), int(now) + 1
         people = self.chat_people()
         if people:
             chat = [len(people.get(t, ())) for t in range(lo, hi)]
@@ -564,7 +566,7 @@ class Session:
             if added >= (1 if every <= 2 else 2):
                 break
 
-    REACTION_ALONE = 80     # the reaction judge's score that makes a clip with no help from the words
+    REACTION_ALONE = 70     # the reaction judge's score that makes a clip with no help from the words
 
     def _reaction_clip(self, sig, verdict, ws, now):
         st = self.settings

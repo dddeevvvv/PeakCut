@@ -675,7 +675,8 @@ Each line is a 2-second slice: [seconds] L=how much louder than usual the stream
 Find moments where something clearly happened: a sudden jump in loudness (shouting, screaming, laughing),
 {chat_hint}a stretch that stays well above normal. Ignore steady background noise or music that is loud the whole time.
 Return up to 3 moments with start and end (seconds), score 0-100 for how strong the reaction is, and a short reason.
-Return [] if nothing stands out. Most stretches have nothing.
+Always return at least the strongest moment, even a weak one, with an honest score: most stretches have
+nothing big, so most scores are low (under 40). 70+ only for a reaction that clearly stands out from the rest.
 
 Signals from second {start:.0f} to {now:.0f}:
 {lines}
