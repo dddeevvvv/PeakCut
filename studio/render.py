@@ -348,15 +348,18 @@ def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layo
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
     fc = _filter(layout, fg_h, face) + f"[v0]ass={name}.ass:fontsdir=f[v]"
-    norm = "loudnorm=I=-14:TP=-1.5:LRA=11"
+    # Live streams drop audio packets now and then. Without a fill, every sound after a drop plays early and
+    # the lips no longer match. aresample puts each sample back on its own time and fills holes with silence.
+    sync = "aresample=async=1:first_pts=0"
+    norm = f"{sync},loudnorm=I=-14:TP=-1.5:LRA=11"
     if tease:
         # Cold open: the teaser plays first, then a short white flash, then the clip from its start. Both pieces
         # come from the same file, so they share size and frame shape and join cleanly.
         a, b = tease
         t = b - a
-        join = (f"[0:v]setpts=PTS-STARTPTS[tv];[0:a:0]asetpts=PTS-STARTPTS,afade=t=out:st={max(0.0, t - 0.06):.2f}:d=0.06[ta];"
-                f"[1:v]setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.12:color=white[mv];[1:a:0]asetpts=PTS-STARTPTS,afade=t=in:d=0.04[ma];"
-                f"[tv][ta][mv][ma]concat=n=2:v=1:a=1[jv][ja];[ja]{norm}[au];")
+        join = (f"[0:v]setpts=PTS-STARTPTS[tv];[0:a:0]{sync},afade=t=out:st={max(0.0, t - 0.06):.2f}:d=0.06[ta];"
+                f"[1:v]setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.12:color=white[mv];[1:a:0]{sync},afade=t=in:d=0.04[ma];"
+                f"[tv][ta][mv][ma]concat=n=2:v=1:a=1[jv][ja];[ja]loudnorm=I=-14:TP=-1.5:LRA=11[au];")
         fc = join + fc.replace("[0:v]", "[jv]", 1)
         base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{a:.2f}", "-t", f"{t:.2f}", "-i", str(src),
                 "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
