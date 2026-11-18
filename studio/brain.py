@@ -69,7 +69,10 @@ Rules:
   end of the allowed length unless the story needs more.
 - Skip weak moments. Fewer strong clips beat many weak ones. Return [] if nothing is worth clipping.
 - score: 0-100, how likely a stranger keeps watching. Be honest; most clips are 50-80.
-- hook: at most 5 words, ALL CAPS, shown as big text on the video. Curiosity, but true to what happens.
+- hook: 2 to 5 words, ALL CAPS, shown as big text on the video for the whole clip. It must make a scroller stay:
+  a "don't miss this" line that promises what is coming without giving it away, like "WAIT FOR HIS REACTION",
+  "HE DID NOT SEE THIS COMING", "CHAT LOST IT", "THIS WENT WRONG FAST". Always true to what happens: never promise
+  something the clip does not deliver. Not a title, not a summary, no emojis.
 - title: at most 70 characters, for the post.
 - description: one or two sentences.
 - hashtags: 5 tags without the # sign.
@@ -386,10 +389,11 @@ REVIEW_SCHEMA = {
             "first_words": {"type": "STRING"},
             "last_words": {"type": "STRING"},
             "teaser_words": {"type": "STRING"},
+            "hook_text": {"type": "STRING"},
             "note": {"type": "STRING"},
         },
         "required": ["id", "hook", "payoff", "emotion", "loop", "stands_alone", "streamer_reacts", "verdict", "first_words", "last_words",
-                     "teaser_words", "note"],
+                     "teaser_words", "hook_text", "note"],
     },
 }
 
@@ -417,6 +421,9 @@ with seconds from the clip's start. Judge only the words IN the clip:
   BEFORE, IN or AFTER text. Use them to start on the hook and end right after the payoff, on a finished sentence.
   For "keep", copy the clip's own first and last words. The clip must stay {min_len} to {max_len} seconds long.
   {loop_rule}
+- hook_text: 2 to 5 words, ALL CAPS: the big text shown on the video for the whole clip. A "don't miss this" line
+  that makes a scroller stay to see what happens, like "WAIT FOR HIS REACTION", "HE DID NOT SEE THIS COMING",
+  "CHAT LOST IT". True to what happens in the clip, never a promise it does not keep. No emojis.
 - teaser_words: the single strongest line IN the clip, 3 to 8 words copied exactly, said in about 1.5 to 3
   seconds: the punchline, the shock or the reaction. It plays first as a teaser, then the clip plays from its
   start. It must come later in the clip, not in its first seconds. Leave it empty ("") when the clip already
@@ -527,6 +534,9 @@ def review_clips(clips, words, title="", min_len=15, max_len=60, duration=0.0, l
                  virality={"hook": hook, "payoff": payoff, "emotion": emotion, "loop": lp, "alone": alone,
                            "streamer": streamer},
                  reason=_text(r.get("note"), 200) or c["reason"])
+        big = roman.to_roman(_text(r.get("hook_text"), 60)).upper()
+        if 2 <= len(big.split()) <= 6:
+            c["hook"] = big
         if teaser:
             c["teaser"] = teaser
         else:

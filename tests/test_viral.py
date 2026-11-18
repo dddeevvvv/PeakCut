@@ -135,5 +135,23 @@ _cr.all_creators = lambda: []
 check("nothing auto-posts when no creator is set up for it", posting.poster({"creator": None}), None)
 _cr.all_creators, _cr.get = real_all, real_get
 
+# ---- the big text: the check writes a "don't miss this" line
+brain.ask_ai = fake([dict(row, hook_text="wait for his reaction")])
+out, _ = brain.review_clips([dict(rclip)], words, "", 10, 60, dur)
+check("the check's big text replaces the first one", out[0]["hook"], "WAIT FOR HIS REACTION")
+brain.ask_ai = fake([dict(row, hook_text="")])
+out, _ = brain.review_clips([dict(rclip)], words, "", 10, 60, dur)
+check("no big text from the check keeps the first one", out[0]["hook"], "X")
+
+# ---- facecam on top
+f = render._filter("stack", 1920, (60, 300, 240, 135))
+check("stack: the webcam fills a band on top and the game the rest", "vstack" in f and "crop=240:135:60:300" in f, True)
+check("stack: the band follows the webcam's shape", render._stack_top((0, 0, 240, 135)), 608)
+check("stack: a tall webcam band is capped", render._stack_top((0, 0, 100, 100)), 760)
+check("stack with no webcam found: the game fills the screen", "vstack" not in render._filter("stack", 1920, None), True)
+check("stack: the big text sits just below the face", render._hook_y("stack", 300, (0, 0, 240, 135)), 698)
+render.render_clip(src, work / "out", "stack", dict(base, start=10.0, end=18.0, teaser=None, layout="stack", facecam=[60, 300, 240, 135], hook="X"), ws, 640, 360)
+check("a stacked clip renders at full size", abs(length(work / "out" / "stack.mp4") - 8.0) < 0.3, True)
+
 print("ALL PASSED" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

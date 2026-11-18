@@ -79,7 +79,9 @@ def install_fonts():
 
 
 LAYOUTS = {"blur": "Full frame + blurred fill", "zoom": "Zoomed in + blurred fill", "crop": "Fill the screen (centre crop)",
-           "gameplay": "Gameplay fills the screen, facecam in the corner"}
+           "gameplay": "Gameplay fills the screen, facecam in the corner",
+           "stack": "Facecam on top, gameplay below"}
+STACK_TOP = (480, 760)    # how tall the facecam band may be, in the 1080x1920 frame
 
 
 def _ts(t):
@@ -122,6 +124,8 @@ def geometry(src_w, src_h, layout):
     top = (H - fg_h) // 2
     if layout in ("crop", "gameplay"):
         return layout, fg_h, 300, 1380
+    if layout == "stack":                 # no facecam known yet: the band is set in _stack_top; these are its defaults
+        return layout, fg_h, STACK_TOP[1] - 40, 1560
     return layout, fg_h, max(230, top - 190), min(1640, top + fg_h + 180)
 
 
@@ -232,7 +236,22 @@ PIP_W = 380            # how wide the facecam is in the 1080-wide frame
 PIP_MARGIN = 26
 
 
+def _stack_top(facecam):
+    """Height of the facecam band on top: the webcam's own shape at full width, kept within STACK_TOP."""
+    fw, fh = facecam[2], facecam[3]
+    return max(STACK_TOP[0], min(STACK_TOP[1], int(round(W * fh / max(1, fw) / 2)) * 2))
+
+
 def _filter(layout, fg_h, facecam=None):
+    if layout == "stack" and facecam:
+        # The streamer's webcam fills a band across the top, big enough to read a face; the game fills the rest.
+        fx, fy, fw, fh = (int(v) for v in facecam)
+        if fw > 8 and fh > 8:
+            top = _stack_top(facecam)
+            return (f"[0:v]fps={config.OUT_FPS},split=2[g][fc];"
+                    f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={W}:{top}:force_original_aspect_ratio=increase,crop={W}:{top},setsar=1[t];"
+                    f"[g]scale={W}:{H - top}:force_original_aspect_ratio=increase,crop={W}:{H - top},setsar=1[b];"
+                    f"[t][b]vstack=2[v0];")
     if layout == "gameplay" and facecam:
         # The game fills the screen, and the webcam sits in the top corner of it, so a viewer sees
         # the play and the face at the same time.
@@ -243,7 +262,7 @@ def _filter(layout, fg_h, facecam=None):
                     f"[base]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[b];"
                     f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={PIP_W}:{pip_h},setsar=1[p];"
                     f"[b][p]overlay={W - PIP_W - PIP_MARGIN}:{PIP_MARGIN}[v0];")
-    if layout == "crop" or (layout == "gameplay" and not facecam):
+    if layout == "crop" or (layout in ("gameplay", "stack") and not facecam):
         return f"[0:v]fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[v0];"
     return (f"[0:v]fps={config.OUT_FPS},split=2[a][b];"
             f"[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=6:2,"
@@ -257,6 +276,8 @@ def _hook_y(layout, hook_y, facecam=None):
     across the top would run under it: it goes just below the picture instead."""
     if layout == "gameplay" and facecam and len(facecam) == 4 and facecam[2] > 8:
         return PIP_MARGIN + int(round(PIP_W * facecam[3] / facecam[2])) + 32
+    if layout == "stack" and facecam and len(facecam) == 4 and facecam[2] > 8:
+        return _stack_top(facecam) + 90          # just below the face, at the top of the game
     return hook_y
 
 
@@ -270,8 +291,8 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     start, end = clip["start"], clip["end"]
     layout, fg_h, hook_y, cap_y = geometry(src_w, src_h, clip.get("layout", "blur"))
     face = clip.get("facecam")
-    if layout == "gameplay" and not (face and len(face) == 4):
-        layout = "crop"     # no webcam found: the game fills the screen, which is still the right shape
+    if layout in ("gameplay", "stack") and not (face and len(face) == 4):
+        layout, fg_h, hook_y, cap_y = geometry(src_w, src_h, "crop")   # no webcam found: the game fills the screen
     hook_y = _hook_y(layout, hook_y, face)
     tease = teaser_span(clip)
     cap_words = words if clip.get("captions", True) else []
