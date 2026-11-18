@@ -466,8 +466,10 @@ class Session:
             why.append(f"loudness +{round(loud_jump * 100)}%")
         chat_base = chat_now = None
         if chat is not None:
-            chat_base = sum(chat[:-10]) / max(1, len(chat) - 10)
-            chat_now = sum(chat[-8:]) / 8          # chat is bursty, so look at a slightly longer stretch
+            # YouTube chat arrives 2-8 s late (it is placed at the second it was sent), so the newest seconds are
+            # still filling in: the 8 s before them are compared instead. Chat is bursty, so 8 s, not 5.
+            chat_base = sum(chat[:-18]) / max(1, len(chat) - 18)
+            chat_now = sum(chat[-16:-8]) / 8
             if chat_now >= max(1.5, chat_base * (1 + pct)):
                 why.append(f"chat +{round((chat_now / max(chat_base, 0.01) - 1) * 100)}%")
         self.base = {"loud_db": round(20 * np.log10(max(base, 1e-6)), 1), "loud_now": round(loud_jump * 100),
@@ -513,8 +515,6 @@ class Session:
         self.tokens += tok
         keep = [c for c in cands if c["score"] >= (40 if must else st["min_score"])]
         verdict["transcript"] = max((c["score"] for c in cands), default=0)
-        if not keep:
-            return self._verdict(verdict, "Words judge: nothing clip-worthy")
         z = brain.loud_zscore(np.array(self.db, dtype=np.float32))
         lo, hi = int(ws), int(now) + 1
         people = self.chat_people()
@@ -524,6 +524,9 @@ class Session:
         else:
             chat = [self.chat.get(t, 0) for t in range(lo, hi)] if (self.chat_on or self.chat_total) else None
             unit = "messages"
+        has_chat = bool(chat) and sum(chat) > 0
+        if not keep and not has_chat:
+            return self._verdict(verdict, "Words judge: nothing clip-worthy")
         try:
             sig, tok2 = brain.judge_signals(z[lo:hi], chat, lo, now, unit=unit, timeout=config.LIVE_AI_TIMEOUT)
             self.checks += 1
@@ -531,6 +534,10 @@ class Session:
         except Exception as e:  # noqa: BLE001
             sig = []
             self.job["ai"]["last_error"] = str(e)[-200:]
+        if not keep:
+            # The words found nothing, but the crowd may have: on a game stream the best moment is often a play
+            # with few words, and the chat explodes right after it. A very strong reaction makes a clip alone.
+            return self._reaction_clip(sig, verdict, ws, now)
         added = 0
         for c in keep:
             match = [m for m in sig if m["end"] >= c["start"] - 10 and m["start"] <= c["end"] + 10 and m["score"] >= 50]
@@ -556,6 +563,37 @@ class Session:
             must = False
             if added >= (1 if every <= 2 else 2):
                 break
+
+    REACTION_ALONE = 80     # the reaction judge's score that makes a clip with no help from the words
+
+    def _reaction_clip(self, sig, verdict, ws, now):
+        st = self.settings
+        best = max(sig, key=lambda m: m["score"], default=None)
+        verdict["reaction"] = best["score"] if best else 0
+        if not best or best["score"] < self.REACTION_ALONE:
+            return self._verdict(verdict, "Words judge: nothing clip-worthy; the reaction was not strong enough alone")
+        # Chat reacts 3-10 s after the moment, so the clip starts well before the burst and ends just after it.
+        s = max(ws, best["start"] - 12)
+        e = min(now, max(best["end"] + 2, s + st["min_len"]))
+        s = max(ws, min(s, e - st["min_len"]))
+        e = min(e, s + st["max_len"])
+        if e - s < st["min_len"] - 1:
+            return self._verdict(verdict, "The reaction was too close to now to clip yet")
+        if any(abs(s - k["start"]) < st["min_gap_min"] * 60 for k in self.job["clips"]):
+            return self._verdict(verdict, "Too close to the last clip")
+        text = " ".join(w["w"] for w in self.words if s <= w["s"] <= e)
+        try:
+            c = brain.describe(text, self.job["title"], self.job["uploader"], game=self._game(),
+                               timeout=config.LIVE_AI_TIMEOUT)
+        except Exception as e2:  # noqa: BLE001
+            self.job["ai"]["last_error"] = str(e2)[-200:]
+            return self._verdict(verdict, "AI error: " + str(e2)[-80:])
+        c.update(start=round(s, 2), end=round(e, 2), score=best["score"],
+                 reason=f"Chat and loudness reacted hard ({best['reason'][:120]}).")
+        c["judges"] = {"words": verdict.get("transcript") or 0, "reaction": best["score"], "why": "Reaction judge was very sure"}
+        c = self._second_look(c, now)
+        self._add_clip(c)
+        return self._verdict(verdict, "Clipped: the reaction judge was very sure")
 
     def _second_look(self, c, now):
         """The same blind editor's check that video clips get: it may trim the clip, scores it with the virality
