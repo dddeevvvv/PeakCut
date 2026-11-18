@@ -108,7 +108,7 @@ _by_user: dict = {}                       # user -> {job id: job}: listing one p
 _lock = threading.RLock()
 on_clip_ready: list = []   # callbacks (job, clip), run once when a clip first finishes
 
-DEFAULTS = {"max_clips": 6, "min_len": 20, "max_len": 40, "style": "bounce", "layout": "stack", "quality": 720,
+DEFAULTS = {"max_clips": 6, "min_len": 20, "max_len": 40, "style": "bounce", "layout": "blur", "quality": 720,
             "range_start": None, "range_end": None, "captions": True, "cold_open": True, "loop": True, "lang": ""}
 SWITCHES = {"captions": "Captions", "cold_open": "Cold open", "loop": "Loop-friendly endings"}
 
