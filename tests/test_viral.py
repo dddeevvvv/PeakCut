@@ -109,7 +109,7 @@ check("a lone clip the check would drop is kept but marked weak", out[0].get("we
 live = {"kind": "live", "dir": str(work)}
 good = {"file": "../out/cold.mp4", "virality": {"streamer": True}}
 brain.looks_like_cutscene = lambda jpeg, timeout=None: False
-check("an uploaded video's clips are not held back", posting.held_back({"kind": "video"}, {}), "")
+check("an uploaded video's clips get the same guard", "did not run" in posting.held_back({"kind": "video", "dir": str(work)}, {"file": "x.mp4"}), True)
 check("a live clip the check never saw is held back", "did not run" in posting.held_back(live, {"file": "x.mp4"}), True)
 check("a weak live clip is held back", "weak" in posting.held_back(live, dict(good, weak=True)), True)
 check("a live clip with no streamer in it is held back", "not the streamer" in posting.held_back(live, {"file": "x.mp4", "virality": {"streamer": False}}), True)

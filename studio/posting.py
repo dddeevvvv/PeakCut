@@ -107,11 +107,9 @@ def _frames(path: Path) -> bytes:
 
 
 def held_back(job, clip) -> str:
-    """Why a live clip must not be posted by itself, or "" when it may. A person can still post any clip.
-    Live clips come from one quick read of the words, so they must also pass the editor's check, have the
-    streamer in them, and not be a game cutscene: a cutscene alone is someone else's film, not a clip."""
-    if job.get("kind") != "live":
-        return ""
+    """Why a clip must not be posted by itself, or "" when it may. A person can still post any clip.
+    Every clip, from a live stream or a video, must have passed the editor's check, have the streamer or host
+    in it, and not be a game cutscene: a cutscene alone is someone else's film, not a clip."""
     v = clip.get("virality")
     if not v:
         return "the AI check of this clip did not run"
