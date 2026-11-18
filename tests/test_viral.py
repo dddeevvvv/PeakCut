@@ -186,13 +186,16 @@ _asked = []
 class _MW:
     def transcribe(self, seg, language=None, **k):
         _asked.append(language)
-        if language is None:
-            return {"language": "ru", "segments": [{"text": "x", "words": [{"word": "Імпальный", "start": 0, "end": 1}]}]}
+        if language == "hi" and len(_asked) == 4:
+            return {"language": "hi", "segments": [{"text": "so out so out so out so out so out", "words": []}]}
         return {"language": language, "segments": [{"text": "bhai dekho", "words": [{"word": "bhai", "start": 0, "end": 0.5}]}]}
 _old = transcribe._mlx_whisper
 transcribe._mlx_whisper = lambda: _MW()
-check("a Mixed piece heard as Russian is asked again in Hindi", [w["w"] for w in transcribe._transcribe_whisper(np.zeros(16000, np.int16), lang="auto")], ["bhai"])
-check("the languages asked: detect, then Hindi", _asked, [None, "hi"])
+check("a Mixed piece is written in Hindi, never translated", [w["w"] for w in transcribe._transcribe_whisper(np.zeros(16000, np.int16), lang="auto")], ["bhai"])
+check("the language asked: Hindi", _asked, ["hi"])
+_asked.extend(["x", "y"])
+transcribe._transcribe_whisper(np.zeros(16000, np.int16), lang="auto")
+check("where Hindi loops, English is asked", _asked[3:], ["hi", "en"])
 transcribe._mlx_whisper = _old
 
 # ---- YouTube live chat
