@@ -159,6 +159,9 @@ check("a creator can be set to Hindi", creators._clean({"lang": "HI"})["lang"], 
 check("a bad language falls back to the server's", creators._clean({"lang": "hindi!"})["lang"], "")
 check("a video's options keep the language", jobs.clean_options({"lang": "hi"})["lang"], "hi")
 check("no language set: the server's is used", transcribe.pick_lang(None), transcribe.config.ASR_LANG)
+check("a mixed streamer is detected per piece", creators._clean({"lang": "auto"})["lang"], "auto")
+check("a looping Whisper piece is dropped", transcribe._looping({"text": "I'm so out I'm so out I'm so out I'm so out I'm so out"}), True)
+check("a normal Whisper piece is kept", transcribe._looping({"text": "bhai ye animation dekho kya mast hai yaar", "compression_ratio": 1.2}), False)
 check("the creator's language wins", transcribe.pick_lang("hi"), "hi")
 
 # ---- sound stays on time when the stream drops audio

@@ -82,7 +82,7 @@ def _clean(data: dict) -> dict:
             v = v if v in ("both", "either") else "both"
         elif k == "lang":
             v = str(v).strip().lower()
-            v = v if re.fullmatch(r"[a-z]{2,3}", v) else ""
+            v = v if v == "auto" or re.fullmatch(r"[a-z]{2,3}", v) else ""
         elif k == "privacy":
             v = v if v in ("public", "unlisted", "private") else "public"
         else:

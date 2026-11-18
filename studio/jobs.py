@@ -136,7 +136,7 @@ def clean_options(options) -> dict:
             v = v if v in render.LAYOUTS else DEFAULTS["layout"]
         elif k == "lang":       # the language spoken, for our own transcript ("" = the server's setting)
             v = str(v).strip().lower()
-            v = v if re.fullmatch(r"[a-z]{2,3}", v) else ""
+            v = v if v == "auto" or re.fullmatch(r"[a-z]{2,3}", v) else ""
         else:                                    # range_start, range_end: seconds into the video
             v = float(v)
             if not math.isfinite(v) or v < 0:

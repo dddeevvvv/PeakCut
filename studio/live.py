@@ -66,7 +66,7 @@ def resolve(url: str) -> dict:
     """Ask yt-dlp for the stream's playable address. Raises NotLive if the channel is offline."""
     import yt_dlp
     opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _Quiet(),
-            "format": "b[height<=720]/bv*[height<=720]+ba/b"}
+            "format": "b[height<=720]/b/bv*[height<=720]+ba"}   # one stream with both, when there is one
     if media.is_youtube(url) and media.youtube_paused():
         raise NotLive(media.YT_BLOCKED)
     try:
@@ -265,6 +265,11 @@ class Session:
             p = f"p{self.part:02d}"
             cmd = ["ffmpeg", "-v", "error", "-reconnect", "1", "-reconnect_streamed", "1",
                    "-reconnect_delay_max", "10"]
+            if len(info["urls"]) > 1:
+                # Picture and sound come as two separate streams. By default ffmpeg starts each one at zero on
+                # its own, which throws away how they line up: the lips then run late or early for the whole
+                # recording. -copyts keeps the stream's own clock for both, so they stay together.
+                cmd += ["-copyts"]
             for u in info["urls"]:
                 cmd += ["-i", u]
             a_in = "1:a:0" if len(info["urls"]) > 1 else "0:a:0"

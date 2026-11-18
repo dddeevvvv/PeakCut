@@ -294,6 +294,8 @@ def pick_lang(lang=None) -> str:
 def language(lang=None) -> str:
     """The language our own transcript is in, as a language code ("" when it is the English model's)."""
     lang = pick_lang(lang)
+    if lang == "auto":
+        lang = "hi"     # mixed Hindi and English: captions keep the English and spell the Hindi in Roman letters
     return lang if lang != "en" and _mlx_whisper() else ""
 
 
@@ -301,10 +303,12 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang="hi") -> list:
     mw = _mlx_whisper()
     seg = audio.astype(np.float32) / 32768.0
     with _whisper_lock:
-        out = mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=lang,
+        out = mw.transcribe(seg, path_or_hf_repo=config.WHISPER_MODEL, language=None if lang == "auto" else lang,
                             word_timestamps=True, condition_on_previous_text=False, verbose=None)
     words = []
     for s in out.get("segments") or []:
+        if _looping(s):
+            continue        # Whisper stuck saying one phrase over and over: made up, not heard
         for w in s.get("words") or []:
             t = str(w.get("word", "")).strip()
             if t:
@@ -312,6 +316,15 @@ def _transcribe_whisper(audio: np.ndarray, on_progress=None, lang="hi") -> list:
     if on_progress:
         on_progress(1.0)
     return words
+
+
+def _looping(seg: dict) -> bool:
+    """True when a Whisper piece repeats itself: a known failure on music or a language it was not told."""
+    if float(seg.get("compression_ratio") or 0) > 2.4:
+        return True
+    w = str(seg.get("text", "")).lower().split()
+    grams = [tuple(w[i:i + 3]) for i in range(len(w) - 2)]
+    return bool(grams) and max(grams.count(g) for g in set(grams)) > 3
 
 
 def transcribe(audio: np.ndarray, on_progress=None, lang=None) -> list:
