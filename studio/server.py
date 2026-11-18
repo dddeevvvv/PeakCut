@@ -1034,6 +1034,7 @@ def media_file(jid: str, name: str, download: int = 0):
     if not re.fullmatch(r"[\w\-]+\.(mp4|jpg)", name):
         raise HTTPException(404)
     f = Path(_job_or_404(jid)["dir"]) / "clips" / name
+    # no-cache: the browser checks each time (a quick 304 when unchanged), so a re-made clip shows at once.
     if not f.is_file():
         raise HTTPException(404)
     return FileResponse(f, filename=name if download else None, headers={"Cache-Control": "private, max-age=300"})
