@@ -42,12 +42,12 @@ def fake(answer):
     return lambda prompt, schema=None, purpose="", timeout=None: (answer, "m", 10)
 row = {"id": "C1", "hook": 2, "payoff": 5, "emotion": 4, "loop": 3, "stands_alone": True, "verdict": "keep",
        "first_words": "so yesterday I tried the", "last_words": "and here it is", "teaser_words": "I hit the headshot from across", "note": "ok"}
-clip = {"start": s, "end": e, "score": 70, "hook": "X", "title": "t", "reason": "r"}
+clip = rclip = {"start": s, "end": e, "score": 70, "hook": "X", "title": "t", "reason": "r"}
 brain.ask_ai = fake([row])
 out, _ = brain.review_clips([dict(clip)], words, "", 10, 60, dur)
 c = out[0]
 check("the review gives the new score", c["score"], V(70, 2, 5, 4, 3, True, c["end"] - c["start"]))
-check("the parts of the score are kept for the app", c["virality"], {"hook": 2, "payoff": 5, "emotion": 4, "loop": 3, "alone": True})
+check("the parts of the score are kept for the app", c["virality"], {"hook": 2, "payoff": 5, "emotion": 4, "loop": 3, "alone": True, "streamer": False})
 check("a clip with a weak opening gets a teaser", "teaser" in c, True)
 check("loop-friendly: the end is tight", c["end"], round(words[-1]["e"] + 0.15, 2))
 brain.ask_ai = fake([dict(row, hook=4)])
@@ -96,6 +96,30 @@ render.render_clip(src, work / "out", "plain", dict(clip, cold_open=False), ws, 
 check("with cold open off it is the clip alone", abs(length(work / "out" / "plain.mp4") - 20.0) < 0.3, True)
 ass = (work / "out" / "cold.ass").read_text(encoding="utf-8")
 check("the captions cover the joined video", "0:00:00.10" in ass and "0:00:02.50" in ass, True)
+
+# ---- auto-post guard for live clips
+from studio import posting
+brain.ask_ai = fake([dict(row, streamer_reacts=True)])
+out, _ = brain.review_clips([dict(rclip)], words, "", 10, 60, dur)
+check("the check says whether the streamer is in the clip", out[0]["virality"]["streamer"], True)
+brain.ask_ai = fake([dict(row, verdict="drop")])
+out, _ = brain.review_clips([dict(rclip)], words, "", 10, 60, dur)
+check("a lone clip the check would drop is kept but marked weak", out[0].get("weak"), True)
+(work / "clips").mkdir(exist_ok=True)
+live = {"kind": "live", "dir": str(work)}
+good = {"file": "../out/cold.mp4", "virality": {"streamer": True}}
+brain.looks_like_cutscene = lambda jpeg, timeout=None: False
+check("an uploaded video's clips are not held back", posting.held_back({"kind": "video"}, {}), "")
+check("a live clip the check never saw is held back", "did not run" in posting.held_back(live, {"file": "x.mp4"}), True)
+check("a weak live clip is held back", "weak" in posting.held_back(live, dict(good, weak=True)), True)
+check("a live clip with no streamer in it is held back", "not the streamer" in posting.held_back(live, {"file": "x.mp4", "virality": {"streamer": False}}), True)
+check("a good gameplay clip with the streamer may post", posting.held_back(live, good), "")
+brain.looks_like_cutscene = lambda jpeg, timeout=None: True
+check("a cutscene is held back even when the streamer talks", "cutscene" in posting.held_back(live, good), True)
+brain.looks_like_cutscene = lambda jpeg, timeout=None: None
+check("when the picture check can't tell, the words checks decide", posting.held_back(live, good), "")
+frames = posting._frames(work / "out" / "cold.mp4")
+check("three frames of a clip make one picture for the check", frames[:2], b"\xff\xd8")
 
 print("ALL PASSED" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

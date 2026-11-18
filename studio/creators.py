@@ -20,7 +20,7 @@ DEFAULTS = {"name": "", "channel": "", "style": "bounce", "layout": "blur", "cap
             "plan": "free", "decide_mode": "both", "must_clip_min": 0, "min_gap_min": 2,
             "game": "",
             "trigger_words": "clip that, clip it",
-            "autopost": False, "accounts": [], "post_min_score": 75, "post_gap_min": 45, "daily_cap": 6,
+            "autopost": False, "accounts": [], "post_min_score": 75, "post_hold_min": 10, "post_gap_min": 45, "daily_cap": 6,
             "privacy": "public", "post_footer": "", "rate_per_1k": 0.0, "channels": {}}
 SWITCHES = {"captions": "Captions", "cold_open": "Cold open", "loop": "Loop-friendly endings"}
 PLATFORMS = ("youtube", "twitch", "kick")
@@ -44,7 +44,7 @@ def _fix(c: dict) -> dict:
         c["channel"] = next((ch[k] for k in PLATFORMS if k in ch), "")
     return c
 NUMERIC = {"min_len": (5, 120), "max_len": (10, 180), "max_clips": (1, 20), "min_score": (0, 100), "buffer_min": (5, 120), "live_per_hour": (1, 60), "ai_every_min": (1, 30), "auto_jump_pct": (20, 300), "must_clip_min": (0, 240), "min_gap_min": (0, 60),
-           "post_min_score": (0, 100), "post_gap_min": (5, 1440), "daily_cap": (1, 50)}
+           "post_min_score": (0, 100), "post_hold_min": (0, 120), "post_gap_min": (5, 1440), "daily_cap": (1, 50)}
 
 
 def root(cid) -> Path:

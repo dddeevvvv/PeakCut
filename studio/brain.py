@@ -381,13 +381,14 @@ REVIEW_SCHEMA = {
             "emotion": {"type": "INTEGER"},
             "loop": {"type": "INTEGER"},
             "stands_alone": {"type": "BOOLEAN"},
+            "streamer_reacts": {"type": "BOOLEAN"},
             "verdict": {"type": "STRING"},
             "first_words": {"type": "STRING"},
             "last_words": {"type": "STRING"},
             "teaser_words": {"type": "STRING"},
             "note": {"type": "STRING"},
         },
-        "required": ["id", "hook", "payoff", "emotion", "loop", "stands_alone", "verdict", "first_words", "last_words",
+        "required": ["id", "hook", "payoff", "emotion", "loop", "stands_alone", "streamer_reacts", "verdict", "first_words", "last_words",
                      "teaser_words", "note"],
     },
 }
@@ -407,6 +408,10 @@ with seconds from the clip's start. Judge only the words IN the clip:
 - loop: 0-5. Does the last line lead naturally back into the first line, so a replay feels seamless? For
   example the end asks what the start answers, or the start finishes the end's sentence. Most clips are 0-2.
 - stands_alone: true if someone who has not seen the video understands it.
+- streamer_reacts: true if the person who made the video (the streamer or host) is talking or reacting in the
+  clip. False if every line is said by someone else: game characters in a cutscene, a video being watched, a song.
+  The transcript does not name speakers: judge from how lines sound (scripted dialogue with character names vs.
+  the host talking to chat or the viewer). When unsure, say false.
 - verdict: "keep" (good as it is), "trim" (better with a new start or end), or "drop" (weak even when trimmed).
 - first_words / last_words: where the clip should start and end, 4 to 6 words each, copied exactly from the
   BEFORE, IN or AFTER text. Use them to start on the hook and end right after the payoff, on a finished sentence.
@@ -501,6 +506,7 @@ def review_clips(clips, words, title="", min_len=15, max_len=60, duration=0.0, l
         emotion = max(0, min(5, int(_num(r.get("emotion")))))
         lp = max(0, min(5, int(_num(r.get("loop")))))
         alone = r.get("stands_alone") is True
+        streamer = r.get("streamer_reacts") is True
         verdict = str(r.get("verdict", "keep")).lower()
         if verdict == "drop":
             dropped.append((hook + payoff, c))
@@ -518,7 +524,8 @@ def review_clips(clips, words, title="", min_len=15, max_len=60, duration=0.0, l
             c = dict(c, end=_tight_end(words, c["start"], c["end"]))
         teaser = _teaser(words, r.get("teaser_words"), c["start"], c["end"]) if hook < 4 else None
         c = dict(c, score=virality(c["score"], hook, payoff, emotion, lp, alone, c["end"] - c["start"]),
-                 virality={"hook": hook, "payoff": payoff, "emotion": emotion, "loop": lp, "alone": alone},
+                 virality={"hook": hook, "payoff": payoff, "emotion": emotion, "loop": lp, "alone": alone,
+                           "streamer": streamer},
                  reason=_text(r.get("note"), 200) or c["reason"])
         if teaser:
             c["teaser"] = teaser
@@ -526,8 +533,8 @@ def review_clips(clips, words, title="", min_len=15, max_len=60, duration=0.0, l
             c.pop("teaser", None)
         kept.append(c)
     if not kept and dropped:          # never leave a video with nothing: keep the best of the dropped ones
-        kept.append(max(dropped, key=lambda x: x[0])[1])
-    if len(dropped):
+        kept.append(dict(max(dropped, key=lambda x: x[0])[1], weak=True))
+    if len(clips) > len(kept):
         log(f"The clip check left out {len(clips) - len(kept)} weak clip(s).")
     kept = [c for i, c in enumerate(kept) if not _overlaps(c["start"], c["end"], kept[:i])]
     return kept, spent
@@ -629,6 +636,27 @@ def look_for_facecam(jpeg: bytes, timeout=None) -> dict:
     if said_no:
         return {"looked": True, "box": None}
     return {"looked": False, "box": None}
+
+CUTSCENE = """Three frames from one short clip of a video game stream are attached, side by side, in order.
+
+Is this clip a CUTSCENE (a cinematic scene the player only watches: film-like camera, often black bars, no
+health bar, map, crosshair or other on-screen game controls) or GAMEPLAY (the player is in control: game
+controls and map on screen)? A small webcam picture of the streamer may sit in a corner; ignore it.
+
+Answer with one word and nothing else: CUTSCENE, GAMEPLAY or UNSURE"""
+
+
+def looks_like_cutscene(jpeg: bytes, timeout=None):
+    """True for a cutscene, False for gameplay, None when the model can't tell or can't see pictures."""
+    try:
+        text, sent, wrote = ai.see(CUTSCENE, jpeg, timeout)
+    except Exception:  # noqa: BLE001
+        return None
+    if sent or wrote:
+        usage.record(sent, wrote, "Auto-post: cutscene check")
+    word = re.search(r"\b(CUTSCENE|GAMEPLAY)\b", (text or "").upper())
+    return None if not word else word.group(1) == "CUTSCENE"
+
 
 SIGNAL_JUDGE = """You judge a live stream ONLY from its reaction signals. You cannot hear the words or see the video.
 Each line is a 2-second slice: [seconds] L=how much louder than usual the streamer was (0 = normal,

@@ -1731,7 +1731,7 @@ async function makeClips() {
 }
 
 /* ============================================================ clips + jobs */
-function virText(c) { const v = c.virality; return v ? `Hook ${v.hook}/5 · Payoff ${v.payoff}/5 · Emotion ${v.emotion}/5 · Loop ${v.loop}/5${v.alone ? " · Stands alone" : ""}${c.teaser && c.cold_open !== false ? " · Cold open" : ""}` : ""; }
+function virText(c) { const v = c.virality; return v ? `Hook ${v.hook}/5 · Payoff ${v.payoff}/5 · Emotion ${v.emotion}/5 · Loop ${v.loop}/5${v.alone ? " · Stands alone" : ""}${v.streamer === false ? " · No streamer" : ""}${c.teaser && c.cold_open !== false ? " · Cold open" : ""}` : ""; }
 function scoreCls(s) { return s >= 80 ? "s-hi" : s >= 60 ? "s-mid" : ""; }
 function postPills(c) {
   return Object.values(c.posts || {}).filter(p => p.status !== "cancelled").map(p => {
@@ -1934,6 +1934,7 @@ function drawCreatorForm() {
       ${A.length ? `<div class="row" style="margin-bottom:16px">${A.map(a => `<label class="ck"><input type="checkbox" data-acc value="${esc(a.id)}" ${c.accounts.includes(a.id) ? "checked" : ""}>${esc(a.label)} · ${esc(a.name)}</label>`).join("")}</div>` : `<button class="btn" data-act="go" data-v="settings" style="margin-bottom:16px">${ic("cog")}Open Settings</button>`}
       <div class="fields"><label class="sw span"><input type="checkbox" data-k="autopost" ${c.autopost ? "checked" : ""}><span>Post new clips automatically<small>Clips that score high enough go out without you approving them.</small></span></label>
         <label class="f">Only auto-post clips scoring at least<input data-k="post_min_score" type="number" min="0" max="100" value="${c.post_min_score}"></label>
+        <label class="f">Wait before posting (minutes)<input data-k="post_hold_min" type="number" min="0" max="120" value="${c.post_hold_min ?? 10}"><small class="sub" style="font-weight:400">Time to cancel a clip in Activity before it goes up.</small></label>
         <label class="f">Minutes between posts on one account<input data-k="post_gap_min" type="number" value="${c.post_gap_min}"></label>
         <label class="f">Most posts per account per day<input data-k="daily_cap" type="number" value="${c.daily_cap}"></label>
         <label class="f">Who can see posts (YouTube, TikTok)<select data-k="privacy">${opts({public:"Public", unlisted:"Unlisted", private:"Private"}, c.privacy)}</select></label>
@@ -2205,7 +2206,7 @@ function drawClipDlg(full) {
     dlg.innerHTML = `<div class="editor"><div class="stage" id="stage">${stage}</div>
       <div class="panel">
         <div class="job-head" style="margin:0"><div><span class="badge ${scoreCls(c.score)}" style="position:static">${c.judges ? "Words " + c.judges.words + (c.judges.reaction ? " · Reaction " + c.judges.reaction : "") : c.score ? "Score " + c.score : "Clipped by hand"}</span>
-          ${virText(c) ? `<p class="sub" style="margin-top:8px">${esc(virText(c))}</p>` : ""}<p class="sub" style="margin-top:8px">${esc(c.reason || "")}</p></div><button class="btn icon ghost" data-act="closedlg" aria-label="Close">${ic("x")}</button></div>
+          ${virText(c) ? `<p class="sub" style="margin-top:8px">${esc(virText(c))}</p>` : ""}${c.autopost_held ? `<p class="sub" style="margin-top:8px;color:var(--bad)">Not posted by itself: ${esc(c.autopost_held)}.</p>` : ""}<p class="sub" style="margin-top:8px">${esc(c.reason || "")}</p></div><button class="btn icon ghost" data-act="closedlg" aria-label="Close">${ic("x")}</button></div>
         <h3>On the video</h3>
         <label class="f">Big text<input data-f="hook" value="${esc(c.hook)}"></label>
         <label class="sw"><input type="checkbox" data-f="captions" data-caption-toggle ${c.captions === false ? "" : "checked"}>Generate captions</label>

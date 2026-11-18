@@ -64,7 +64,7 @@ def _next_slot(account_id, gap_min, cap):
     return t
 
 
-def enqueue(job, clip, account_ids, now=False) -> list:
+def enqueue(job, clip, account_ids, now=False, hold_min=0) -> list:
     c = creators.get(job["creator"]) or creators.DEFAULTS
     made = []
     with _lock:
@@ -75,7 +75,7 @@ def enqueue(job, clip, account_ids, now=False) -> list:
             if any(p["job"] == job["id"] and p["clip"] == clip["id"] and p["account"] == aid
                    and p["status"] in OPEN + ("posted",) for p in _mine()):
                 continue  # never post the same clip to the same account twice
-            due = time.time() if now else _next_slot(aid, c["post_gap_min"], c["daily_cap"])
+            due = time.time() if now else max(_next_slot(aid, c["post_gap_min"], c["daily_cap"]), time.time() + hold_min * 60)
             p = {"id": secrets.token_hex(8), "user": ctx.uid(), "job": job["id"], "clip": clip["id"], "creator": job["creator"],
                  "account": aid, "account_name": acc["name"], "platform": acc["platform"], "status": "scheduled",
                  "due_at": due, "created": time.time(), "title": clip.get("title") or clip.get("hook") or "Clip",
@@ -88,6 +88,47 @@ def enqueue(job, clip, account_ids, now=False) -> list:
     return made
 
 
+def _frames(path: Path) -> bytes:
+    """Three small frames of a finished clip, side by side, as one JPEG."""
+    import subprocess, tempfile
+    from . import media
+    dur = float(media.probe(path).get("duration") or 0)
+    if dur <= 0:
+        return b""
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "f.jpg"
+        ins = []
+        for f in (0.25, 0.5, 0.75):
+            ins += ["-ss", f"{dur * f:.2f}", "-i", str(path)]
+        fc = "".join(f"[{i}:v]scale=320:-2,setsar=1[v{i}];" for i in range(3)) + "[v0][v1][v2]hstack=3[o]"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", fc, "-map", "[o]", "-frames:v", "1",
+                        "-q:v", "4", str(out)], capture_output=True, timeout=60)
+        return out.read_bytes() if out.exists() else b""
+
+
+def held_back(job, clip) -> str:
+    """Why a live clip must not be posted by itself, or "" when it may. A person can still post any clip.
+    Live clips come from one quick read of the words, so they must also pass the editor's check, have the
+    streamer in them, and not be a game cutscene: a cutscene alone is someone else's film, not a clip."""
+    if job.get("kind") != "live":
+        return ""
+    v = clip.get("virality")
+    if not v:
+        return "the AI check of this clip did not run"
+    if clip.get("weak"):
+        return "the AI check called it weak"
+    if not v.get("streamer"):
+        return "only game characters or others talk in it, not the streamer"
+    try:
+        from . import brain
+        scene = brain.looks_like_cutscene(_frames(Path(job["dir"]) / "clips" / clip["file"]))
+    except Exception:  # noqa: BLE001 - no picture check: the words checks above still hold
+        scene = None
+    if scene:
+        return "it looks like a game cutscene"
+    return ""
+
+
 def on_clip_ready(job, clip):
     """Called once when a clip first finishes rendering."""
     c = creators.get(job["creator"])
@@ -95,7 +136,13 @@ def on_clip_ready(job, clip):
         return
     if clip.get("score", 0) < c["post_min_score"]:
         return  # includes hand-made clips (score 0): those wait for you to press Post
-    made = enqueue(job, clip, c["accounts"])
+    why = held_back(job, clip)
+    if why:
+        clip["autopost_held"] = why
+        jobs.save(job)
+        creators.log(c["id"], f"Not posted by itself, because {why}: {clip.get('title') or clip.get('hook')}")
+        return
+    made = enqueue(job, clip, c["accounts"], hold_min=c.get("post_hold_min", 10))
     if made:
         creators.log(c["id"], f"Queued for {len(made)} account(s): {clip.get('title') or clip.get('hook')}")
 

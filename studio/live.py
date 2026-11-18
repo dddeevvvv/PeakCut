@@ -515,12 +515,30 @@ class Session:
                                                      st["decide_mode"] == "either" else "Forced: no clip for a while")
             c["judges"] = {"words": c["score"], "reaction": rs or None, "why": why}
             c["reason"] = f"{c['reason']} ({why.lower()}.)"
+            c = self._second_look(c, now)
             self._add_clip(c)
             self._verdict(verdict, "Clipped: " + why.lower())
             added += 1
             must = False
             if added >= (1 if every <= 2 else 2):
                 break
+
+    def _second_look(self, c, now):
+        """The same blind editor's check that video clips get: it may trim the clip, scores it with the virality
+        score, and says whether the streamer is in it at all. One AI call. On any problem the clip is unchanged
+        and has no "virality", which keeps it from being posted by itself."""
+        if not config.CLIP_REVIEW:
+            return c
+        st = self.settings
+        try:
+            out, tok = brain.review_clips([c], self.words, self.job["title"], st["min_len"], st["max_len"], now,
+                                          log=lambda m: None, loop=self.job["options"].get("loop", True))
+            self.checks += 1
+            self.tokens += tok
+            return out[0] if out else c
+        except Exception as e:  # noqa: BLE001
+            self.job["ai"]["last_error"] = str(e)[-200:]
+            return c
 
     def _verdict(self, v, result):
         self.verdicts.append(dict(v, result=result))
@@ -572,7 +590,8 @@ class Session:
     def _add_clip(self, c):
         self.n += 1
         c.update(id=f"clip{self.n:03d}", style=self.settings["style"], layout=self.settings["layout"],
-                 captions=self.job["options"].get("captions", True), status="queued", version=0, made_at=time.time())
+                 captions=self.job["options"].get("captions", True), cold_open=self.job["options"].get("cold_open", True),
+                 status="queued", version=0, made_at=time.time())
         with self.lock:
             self.job["clips"].append(c)
         jobs.save(self.job)
