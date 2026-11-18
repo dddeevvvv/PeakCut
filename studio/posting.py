@@ -64,8 +64,20 @@ def _next_slot(account_id, gap_min, cap):
     return t
 
 
+def poster(job):
+    """The settings that decide how a job's clips are posted: its creator's. A video filed under no creator uses
+    the settings of the creator that auto-posts (the first by name), without that creator's own footer, so
+    every clipped video can post by itself once one creator is set up for it. None when nothing auto-posts."""
+    c = creators.get(job.get("creator")) if job.get("creator") else None
+    if c:
+        return c
+    auto = sorted((x for x in creators.all_creators() if x.get("autopost") and x.get("accounts")),
+                  key=lambda x: str(x.get("name", "")).lower())
+    return dict(auto[0], post_footer="") if auto else None
+
+
 def enqueue(job, clip, account_ids, now=False, hold_min=0) -> list:
-    c = creators.get(job["creator"]) or creators.DEFAULTS
+    c = poster(job) or creators.DEFAULTS
     made = []
     with _lock:
         for aid in account_ids:
@@ -129,7 +141,7 @@ def held_back(job, clip) -> str:
 
 def on_clip_ready(job, clip):
     """Called once when a clip first finishes rendering."""
-    c = creators.get(job["creator"])
+    c = poster(job)
     if not c or not c["autopost"] or not c["accounts"]:
         return
     if clip.get("score", 0) < c["post_min_score"]:
@@ -160,7 +172,7 @@ def _post(p):
         if not acc:
             raise RuntimeError("That account was disconnected.")
         path = Path(job["dir"]) / "clips" / clip["file"]
-        creator = creators.get(job["creator"]) or dict(creators.DEFAULTS, name="clips")
+        creator = poster(job) or dict(creators.DEFAULTS, name="clips")
         title, cap = clip.get("title") or clip.get("hook") or "Clip", _caption(clip, creator)
         if acc["platform"] == "youtube":
             rid, url = accounts.youtube_upload(acc, path, title, cap + "\n\n#Shorts", clip.get("hashtags", []), creator["privacy"])

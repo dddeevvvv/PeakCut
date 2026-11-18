@@ -121,5 +121,19 @@ check("when the picture check can't tell, the words checks decide", posting.held
 frames = posting._frames(work / "out" / "cold.mp4")
 check("three frames of a clip make one picture for the check", frames[:2], b"\xff\xd8")
 
+# ---- videos filed under no creator post with the auto-posting creator's settings
+from studio import creators as _cr
+real_all, real_get = _cr.all_creators, _cr.get
+_cr.get = lambda cid: None
+_cr.all_creators = lambda: [{"name": "Zed", "autopost": True, "accounts": ["a"], "post_footer": "Credit: Z"},
+                            {"name": "Ann", "autopost": True, "accounts": ["b"], "post_footer": "Credit: A"},
+                            {"name": "Off", "autopost": False, "accounts": ["c"], "post_footer": ""}]
+p = posting.poster({"creator": None})
+check("a video with no creator uses an auto-posting creator's settings", p["accounts"], ["b"])
+check("...without that creator's own credit line", p["post_footer"], "")
+_cr.all_creators = lambda: []
+check("nothing auto-posts when no creator is set up for it", posting.poster({"creator": None}), None)
+_cr.all_creators, _cr.get = real_all, real_get
+
 print("ALL PASSED" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)
