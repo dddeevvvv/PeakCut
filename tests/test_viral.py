@@ -180,5 +180,17 @@ pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(work / "gapout" / "crop
 x = np.abs(np.frombuffer(pcm, np.int16).astype(float))
 check("a hole in the sound is filled, so the beep stays on time", abs(np.argmax(x > x.max() / 2) / 8000 - 5.0) < 0.08, True)
 
+# ---- YouTube live chat
+from studio import ytchat
+page = {"continuationContents": {"liveChatContinuation": {
+    "continuations": [{"timedContinuationData": {"continuation": "NEXT", "timeoutMs": 3000}}],
+    "actions": [{"addChatItemAction": {"item": {"liveChatTextMessageRenderer": {"timestampUsec": "1700000000500000", "authorExternalChannelId": "UCa"}}}},
+                {"addChatItemAction": {"item": {"liveChatPaidMessageRenderer": {"timestampUsec": "1700000001000000", "authorExternalChannelId": "UCb"}}}},
+                {"markChatItemAsDeletedAction": {}}]}}}
+got, nxt = ytchat.messages(page)
+check("chat messages are read with their time, author and Super Chat", got, [(1700000000.5, "UCa", False), (1700000001.0, "UCb", True)])
+check("the next chat page and the wait are read", nxt, ("NEXT", 3.0))
+check("an empty chat page ends the reading", ytchat.messages({}), ([], (None, 5.0)))
+
 print("ALL PASSED" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

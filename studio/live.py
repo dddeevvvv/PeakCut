@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import alerts, auth, brain, config, creators, ctx, facecam, games, jobs, load, media, transcribe, usage
+from . import alerts, auth, brain, config, creators, ctx, facecam, games, jobs, load, media, transcribe, usage, ytchat
 
 # ":username!user@host PRIVMSG #channel :the message"
 _NICK = re.compile(r"(?m)^:([A-Za-z0-9_]{2,25})!")
@@ -82,7 +82,8 @@ def resolve(url: str) -> dict:
     title = info.get("title") or ""
     if "(live)" in title and info.get("description"):  # Twitch puts the real stream title here
         title = str(info["description"]).splitlines()[0][:120]
-    return {"urls": [f["url"] for f in fmts], "title": title,
+    return {"urls": [f["url"] for f in fmts], "title": title, "id": info.get("id") or "",
+            "youtube": "youtube" in str(info.get("extractor") or "").lower(),
             "uploader": info.get("uploader") or info.get("channel") or ""}
 
 
@@ -136,6 +137,7 @@ class Session:
         self.chat_kept = 0                   # the second this was last pruned at
         self.chat_total = 0
         self.chat_on = False
+        self.yt_chat = ""                    # the YouTube video whose live chat is being read
         self.last_check = 0.0
         self.words_at_check = 0
         self.checks = 0
@@ -259,6 +261,9 @@ class Session:
                 continue
             if not self.job.get("uploader"):
                 self.job.update(title=info["title"], uploader=info["uploader"])
+            if info.get("youtube") and info.get("id") and not self.yt_chat:
+                self.yt_chat = info["id"]
+                threading.Thread(target=ctx.bind(self._yt_chat), args=(info["id"],), daemon=True).start()
             self.part += 1
             with self.lock:
                 self.seg_clock = max(self.seg_clock, self.samples / SR)
@@ -357,6 +362,29 @@ class Session:
                 pass
             self.chat_on = False
             self.stop_flag.wait(5)
+
+    def _yt_chat(self, video_id):
+        """YouTube live chat, counted the same way as Twitch chat. Each message is placed at the moment it was
+        sent, not when it was read: the chat is fetched every few seconds in batches."""
+        def add(sent_at, author, paid):
+            with self.lock:
+                second = int(self.samples / SR - max(0.0, time.time() - sent_at))
+                if second < 0:
+                    return          # sent before the recording began
+                self.chat[second] += 3 if paid else 1      # a Super Chat is someone paying to react: worth more
+                self.chat_total += 3 if paid else 1
+                if author:
+                    self.chat_users.setdefault(second, set()).add(author)
+                    self.chat_kept = _trim_names(self.chat_users, second, self.chat_kept)
+        stop = lambda: self.stop_flag.is_set() or self.ended
+        while not stop():
+            try:
+                self.chat_on = True
+                ytchat.follow(video_id, add, stop)
+            except Exception:  # noqa: BLE001 - chat is only a hint: the clips are found without it too
+                pass
+            self.chat_on = False
+            self.stop_flag.wait(15)
 
     def _chat_spike(self, s, e):
         """True if chat was at least 3x busier than usual during (and just after) these seconds.
